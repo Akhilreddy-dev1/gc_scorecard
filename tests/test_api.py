@@ -50,9 +50,15 @@ def test_scoring_rules_endpoint_returns_defaults():
     app, _ = build_test_app()
 
     with TestClient(app) as client:
-        response = client.get("/api/scoring-rules")
+        response = client.get(
+            "/api/scoring-rules",
+            headers={"Origin": "https://frontend-wheat-gamma-11.vercel.app"},
+        )
 
     assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == (
+        "https://frontend-wheat-gamma-11.vercel.app"
+    )
     assert {rule["action"]: rule["points"] for rule in response.json()} == {
         "text_message": 3,
         "reaction": 1,

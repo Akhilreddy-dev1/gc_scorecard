@@ -26,7 +26,8 @@ export type ChatBroadcast = ChatEvent & {
 type ConnectionState = "connecting" | "open" | "closed" | "error";
 
 const websocketBaseUrl =
-  import.meta.env.VITE_WS_URL ?? "ws://localhost:8000";
+  import.meta.env.VITE_WS_URL ??
+  (import.meta.env.DEV ? "ws://localhost:8000" : "");
 
 export function useChatWebSocket(groupId: string, userId: string) {
   const socketRef = useRef<WebSocket | null>(null);
@@ -36,6 +37,11 @@ export function useChatWebSocket(groupId: string, userId: string) {
     useState<ConnectionState>("connecting");
 
   useEffect(() => {
+    if (!websocketBaseUrl) {
+      setConnectionState("error");
+      return;
+    }
+
     const socket = new WebSocket(`${websocketBaseUrl}/ws/groups/${groupId}`);
     socketRef.current = socket;
     setConnectionState("connecting");

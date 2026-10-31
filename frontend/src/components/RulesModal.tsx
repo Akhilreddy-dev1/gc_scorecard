@@ -2,13 +2,20 @@ import { useEffect, useState } from "react";
 
 type ScoringRule = { action: string; points: number; description?: string };
 
-const apiBaseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const apiBaseUrl =
+  import.meta.env.VITE_API_URL ??
+  (import.meta.env.DEV ? "http://localhost:8000" : "");
 
 export function RulesModal() {
   const [rules, setRules] = useState<ScoringRule[]>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!apiBaseUrl) {
+      setError("VITE_API_URL is not configured for this deployment");
+      return;
+    }
+
     fetch(`${apiBaseUrl}/api/scoring-rules`)
       .then((response) => {
         if (!response.ok) throw new Error("Unable to load scoring rules");
