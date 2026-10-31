@@ -4,7 +4,7 @@ FastAPI and React scaffold for a group chat where messages and media activity aw
 
 ## Backend
 
-1. Copy `.env.example` to `.env` and set `DATABASE_URL` to the Supabase PostgreSQL connection string.
+1. Copy `.env.example` to `.env` and set the separate Supabase database variables. The password is URL-encoded by the application, so passwords containing `@`, spaces, or other special characters are safe.
 2. Install dependencies with `python -m pip install -r requirements.txt`.
 3. Start the API with `uvicorn app.main:app --reload`.
 

@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.config import Settings
 from app.database import Base, normalize_database_url
 from app.main import create_app
 from app.models import Group, User
@@ -27,6 +28,21 @@ def test_plain_postgres_url_uses_psycopg_three_driver():
     )
     assert normalize_database_url("postgres://user:pass@host/db") == (
         "postgresql+psycopg://user:pass@host/db"
+    )
+
+
+def test_settings_encode_special_characters_in_database_password():
+    settings = Settings(
+        db_user="postgres",
+        db_password="p@ss word#1",
+        db_host="pooler.supabase.com",
+        db_port=6543,
+        db_name="postgres",
+    )
+
+    assert settings.database_url == (
+        "postgresql+psycopg://postgres:p%40ss+word%231"
+        "@pooler.supabase.com:6543/postgres"
     )
 
 
