@@ -61,7 +61,18 @@ export function ChatRoom({ messages, connectionState, onSend }: ChatRoomProps) {
                 <span>+{message.points_awarded} pts</span>
               ) : null}
             </div>
-            <p>{message.content ?? message.media_url ?? message.type}</p>
+            {message.type === "reel_share" && (message.media_url ?? message.content) ? (
+              <iframe
+                className="reel-player"
+                src={message.media_url ?? message.content}
+                title={`Reel shared by ${message.user_id.slice(0, 8)}`}
+                loading="lazy"
+                allow="autoplay; encrypted-media; picture-in-picture"
+                allowFullScreen
+              />
+            ) : (
+              <p>{message.content ?? message.media_url ?? message.type}</p>
+            )}
           </article>
         ))}
       </div>
