@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database import Base
+from app.database import Base, normalize_database_url
 from app.main import create_app
 from app.models import Group, User
 
@@ -19,6 +19,15 @@ def build_test_app():
     test_session = sessionmaker(bind=test_engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(test_engine)
     return create_app(test_engine, test_session), test_session
+
+
+def test_plain_postgres_url_uses_psycopg_three_driver():
+    assert normalize_database_url("postgresql://user:pass@host/db") == (
+        "postgresql+psycopg://user:pass@host/db"
+    )
+    assert normalize_database_url("postgres://user:pass@host/db") == (
+        "postgresql+psycopg://user:pass@host/db"
+    )
 
 
 def test_scoring_rules_endpoint_returns_defaults():
