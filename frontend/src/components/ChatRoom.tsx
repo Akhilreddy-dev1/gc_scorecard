@@ -16,21 +16,12 @@ type ChatRoomProps = {
 
 export function ChatRoom({ messages, connectionState, onSend }: ChatRoomProps) {
   const [text, setText] = useState("");
-  const [reelUrl, setReelUrl] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const sendText = () => {
     const content = text.trim();
     if (!content || !onSend({ type: "text", content })) return;
     setText("");
-  };
-
-  const shareReel = () => {
-    const url = reelUrl.trim();
-    if (!url || !onSend({ type: "reel_share", content: url, media_url: url })) {
-      return;
-    }
-    setReelUrl("");
   };
 
   const uploadMedia = (file?: File) => {
@@ -101,19 +92,6 @@ export function ChatRoom({ messages, connectionState, onSend }: ChatRoomProps) {
           onClick={() => fileInputRef.current?.click()}
         >
           Media
-        </button>
-      </div>
-      <div className="reel-composer">
-        <label className="sr-only" htmlFor="reel-input">Reel URL</label>
-        <input
-          id="reel-input"
-          value={reelUrl}
-          onChange={(event) => setReelUrl(event.target.value)}
-          placeholder="Paste a reel URL..."
-          type="url"
-        />
-        <button className="ghost-button" type="button" onClick={shareReel}>
-          Share Reel
         </button>
       </div>
     </section>

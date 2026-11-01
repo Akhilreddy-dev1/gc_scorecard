@@ -96,7 +96,6 @@ h2 {
 .section-heading,
 .bubble-meta,
 .composer,
-.reel-composer,
 .score-list li,
 .rules-list li {
   display: flex;
@@ -172,14 +171,12 @@ h2 {
   color: #72e6be;
 }
 
-.composer,
-.reel-composer {
+.composer {
   gap: 0.5rem;
   margin-top: 0.75rem;
 }
 
-.composer input,
-.reel-composer input {
+.composer input {
   min-width: 0;
   flex: 1;
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -189,14 +186,12 @@ h2 {
   background: rgba(4, 8, 18, 0.45);
 }
 
-.composer input:focus,
-.reel-composer input:focus {
+.composer input:focus {
   border-color: #9eb0ff;
   outline: 2px solid rgba(158, 176, 255, 0.18);
 }
 
-.composer button,
-.reel-composer button {
+.composer button {
   cursor: pointer;
   border: 0;
   border-radius: 0.65rem;
