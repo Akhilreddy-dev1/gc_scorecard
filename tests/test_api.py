@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.config import Settings
 from app.database import Base, normalize_database_url
 from app.main import create_app
 from app.models import Group, User
@@ -30,13 +31,34 @@ def test_plain_postgres_url_uses_psycopg_three_driver():
     )
 
 
+def test_settings_encode_special_characters_in_database_password():
+    settings = Settings(
+        db_user="postgres",
+        db_password="p@ss word#1",
+        db_host="pooler.supabase.com",
+        db_port=6543,
+        db_name="postgres",
+    )
+
+    assert settings.database_url == (
+        "postgresql+psycopg://postgres:p%40ss+word%231"
+        "@pooler.supabase.com:6543/postgres"
+    )
+
+
 def test_scoring_rules_endpoint_returns_defaults():
     app, _ = build_test_app()
 
     with TestClient(app) as client:
-        response = client.get("/api/scoring-rules")
+        response = client.get(
+            "/api/scoring-rules",
+            headers={"Origin": "https://frontend-wheat-gamma-11.vercel.app"},
+        )
 
     assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == (
+        "https://frontend-wheat-gamma-11.vercel.app"
+    )
     assert {rule["action"]: rule["points"] for rule in response.json()} == {
         "text_message": 3,
         "reaction": 1,
