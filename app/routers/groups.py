@@ -20,23 +20,39 @@ def create_or_join_session(
     if not username:
         raise HTTPException(status_code=422, detail="Username cannot be empty")
 
+    creating_room = payload.group_name is not None
+    if creating_room == (payload.group_id is not None):
+        raise HTTPException(
+            status_code=422,
+            detail="Choose either a room name to create a room or a room code to join one",
+        )
+
     user = db.get(User, payload.user_id) if payload.user_id else None
+    if user is None and payload.user_id is None:
+        existing_user = db.scalar(select(User).where(User.username == username))
+        if existing_user is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="That name is already in use. Choose another name or restore your saved session.",
+            )
     if user is None:
-        user = db.scalar(select(User).where(User.username == username))
-    if user is None:
-        user = User(username=username)
+        user = User(id=payload.user_id, username=username) if payload.user_id else User(username=username)
         db.add(user)
         db.flush()
     else:
         user.username = username
 
-    group = db.get(Group, payload.group_id) if payload.group_id else None
-    if payload.group_id and group is None:
-        raise HTTPException(status_code=404, detail="That room does not exist")
-    if group is None:
-        group = Group(id=uuid4(), name=f"{username}'s room")
+    if creating_room:
+        room_name = payload.group_name.strip()
+        if not room_name:
+            raise HTTPException(status_code=422, detail="Room name cannot be empty")
+        group = Group(id=uuid4(), name=room_name)
         db.add(group)
         db.flush()
+    else:
+        group = db.get(Group, payload.group_id)
+        if group is None:
+            raise HTTPException(status_code=404, detail="That room does not exist")
 
     membership = db.scalar(
         select(GroupMember).where(
@@ -54,7 +70,6 @@ def create_or_join_session(
         group_id=group.id,
         group_name=group.name,
     )
-
 
 @router.get("/groups/{group_id}/scores")
 def get_group_scores(group_id: UUID, db: Session = Depends(get_db)) -> list[dict]:
