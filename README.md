@@ -1,37 +1,35 @@
 # Gamified Group Chat
 
-FastAPI and React scaffold for a group chat where messages and media activity award configurable points.
+FastAPI and React app for a group chat where messages and media activity award configurable points.
 
-## Backend
+## Run locally
 
-1. Copy `.env.example` to `.env` and set the separate Supabase database variables. The password is URL-encoded by the application, so passwords containing `@`, spaces, or other special characters are safe.
-2. Install dependencies with `python -m pip install -r requirements.txt`.
-3. Start the API locally with `uvicorn app.main:app --reload`.
+1. Copy `.env.example` to `.env`. Leave database values blank for SQLite, or set the separate Supabase/Postgres values. Database passwords are URL-encoded by the app.
+2. Install backend dependencies: `python -m pip install -r requirements.txt`.
+3. Start the API from the repository root: `uvicorn app.main:app --reload`.
+4. In another terminal, run `cd frontend && npm install && npm run dev`.
 
-For Render, use a Python Web Service with:
+The Vite development server proxies API and WebSocket requests to `http://localhost:8000`. Open the URL printed by Vite, enter your name, then create a room or join with a teammate's room code. The room code is a UUID and can be shared from the room header.
+
+## Deploy the backend to Render
+
+Use a Python Web Service with:
 
 - Build command: `pip install -r requirements.txt`
 - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
-The service must bind to `0.0.0.0` and Render's `$PORT`; otherwise Render reports that no port was found.
+The service must bind to `0.0.0.0` and Render's `$PORT`. The repository includes `render.yaml` for this configuration.
 
-The backend creates the SQLAlchemy tables on startup and seeds these rules when they are missing:
+For separate frontend and backend deployments, set `VITE_API_URL` and `VITE_WS_URL` in the frontend build environment. Set `FRONTEND_ORIGINS` on the API to a comma-separated list of allowed frontend origins.
 
-| Action | Points |
-| --- | ---: |
-| `text_message` | 3 |
-| `reaction` | 1 |
-| `media_upload` | 4 |
-| `share_reel` | 5 |
+## Backend
 
-`GET /api/scoring-rules` returns the current rules. Group rooms use `WS /ws/groups/{group_id}` and accept `text`, `reaction`, `media`, and `reel_share` event payloads.
+Database tables and default scoring rules are initialized on startup. The API provides:
 
-## Frontend
+- `GET /health` for a health check
+- `POST /api/session` to create or join a room and establish a user
+- `GET /api/groups/{group_id}/scores` to load the persisted leaderboard
+- `GET /api/scoring-rules` to load the current rules
+- `WS /ws/groups/{group_id}` for real-time chat and score updates
 
-```powershell
-Set-Location frontend
-npm install
-npm run dev
-```
-
-Set `VITE_API_URL` and `VITE_WS_URL` when the API is not running on `localhost:8000`.
+Default points are 3 for text messages, 1 for reactions, 4 for media uploads, and 5 for reel shares. Image/video uploads are shared in memory as data URLs, with a 2 MB client-side size limit; score totals persist in the configured database.
