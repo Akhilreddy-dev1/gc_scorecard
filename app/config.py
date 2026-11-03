@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     db_name: str = "postgres"
     frontend_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"
-        "https://frontend-wheat-gamma-11.vercel.app"
+        "https://frontend-wheat-gamma-11.vercel.app,https://frontend-akhil-0cdc.vercel.app"
     )
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")

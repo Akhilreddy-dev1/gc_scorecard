@@ -16,6 +16,7 @@ class SessionRequest(BaseModel):
     username: str = Field(min_length=1, max_length=100)
     user_id: UUID | None = None
     group_id: UUID | None = None
+    group_name: str | None = Field(default=None, min_length=1, max_length=150)
 
 
 class SessionResponse(BaseModel):
