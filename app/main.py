@@ -40,7 +40,7 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=get_settings().allowed_frontend_origins,
-        allow_origin_regex=r"https://[a-z0-9-]+\.vercel\.app",
+        allow_origin_regex=r"https://[a-z0-9-]+\\.vercel\\.app",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -87,7 +87,7 @@ def create_app(
                 except (ValueError, ValidationError) as error:
                     await websocket.send_json({"error": str(error)})
         except WebSocketDisconnect:
-            manager.disconnect(group_id, websocket)
+            await manager.disconnect(group_id, websocket)
 
     return app
 
