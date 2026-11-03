@@ -26,7 +26,9 @@ function readSavedSession(): Session | null {
 function readIdentity(): Identity | null {
   try {
     const stored = localStorage.getItem("gc-scorecard-identity");
-    return stored ? (JSON.parse(stored) as Identity) : null;
+    if (stored) return JSON.parse(stored) as Identity;
+    const session = readSavedSession();
+    return session ? { user_id: session.user_id, username: session.username } : null;
   } catch {
     return null;
   }

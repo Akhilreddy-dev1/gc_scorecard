@@ -40,6 +40,14 @@ def create_or_join_session(
         db.add(user)
         db.flush()
     else:
+        existing_user = db.scalar(
+            select(User).where(User.username == username, User.id != user.id)
+        )
+        if existing_user is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="That name is already in use. Choose another name.",
+            )
         user.username = username
 
     if creating_room:
