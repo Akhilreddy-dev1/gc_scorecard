@@ -17,7 +17,6 @@ export type LiveScore = {
 };
 
 export type ChatBroadcast = ChatEvent & {
-  error?: string;
   points_awarded?: number;
   total_points?: number;
   live_scores?: LiveScore[];
@@ -25,42 +24,58 @@ export type ChatBroadcast = ChatEvent & {
 
 type ConnectionState = "connecting" | "open" | "closed" | "error";
 
+const apiBaseUrl = import.meta.env.VITE_API_URL ?? "";
 const websocketBaseUrl =
   import.meta.env.VITE_WS_URL ??
-  (import.meta.env.DEV ? "ws://localhost:8000" : "");
+  `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
 
 export function useChatWebSocket(groupId: string, userId: string) {
   const socketRef = useRef<WebSocket | null>(null);
   const [messages, setMessages] = useState<ChatBroadcast[]>([]);
   const [scores, setScores] = useState<LiveScore[]>([]);
-  const [connectionState, setConnectionState] =
-    useState<ConnectionState>("connecting");
+  const [serverError, setServerError] = useState("");
+  const [connectionState, setConnectionState] = useState<ConnectionState>("closed");
 
   useEffect(() => {
-    if (!websocketBaseUrl) {
-      setConnectionState("error");
-      return;
-    }
+    if (!groupId || !userId) return;
 
+    let active = true;
     const socket = new WebSocket(`${websocketBaseUrl}/ws/groups/${groupId}`);
     socketRef.current = socket;
     setConnectionState("connecting");
+
+    fetch(`${apiBaseUrl}/api/groups/${groupId}/scores`)
+      .then((response) => {
+        if (!response.ok) throw new Error("Unable to load scores");
+        return response.json() as Promise<LiveScore[]>;
+      })
+      .then((initialScores) => {
+        if (active) setScores(initialScores);
+      })
+      .catch(() => {
+        if (active) setScores([]);
+      });
 
     socket.onopen = () => setConnectionState("open");
     socket.onerror = () => setConnectionState("error");
     socket.onclose = () => setConnectionState("closed");
     socket.onmessage = (message) => {
-      const event = JSON.parse(message.data) as ChatBroadcast;
-      if (event.error) return;
+      const event = JSON.parse(message.data) as ChatBroadcast & { error?: string };
+      if (event.error) {
+        setServerError(event.error);
+        return;
+      }
+      setServerError("");
       setMessages((current) => [...current, event]);
       if (event.live_scores) setScores(event.live_scores);
     };
 
     return () => {
+      active = false;
       socket.close();
       socketRef.current = null;
     };
-  }, [groupId]);
+  }, [groupId, userId]);
 
   const sendEvent = useCallback(
     (event: Omit<ChatEvent, "user_id">) => {
@@ -71,5 +86,5 @@ export function useChatWebSocket(groupId: string, userId: string) {
     [userId],
   );
 
-  return { messages, scores, connectionState, sendEvent };
+  return { messages, scores, serverError, connectionState, sendEvent };
 }
