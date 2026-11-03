@@ -1,14 +1,16 @@
 from functools import lru_cache
 from urllib.parse import quote_plus
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    database_url_override: str | None = Field(default=None, validation_alias="DATABASE_URL")
     db_user: str | None = None
     db_password: str | None = None
     db_host: str | None = None
-    db_port: int = 6543
+    db_port: int = 5432
     db_name: str = "postgres"
     frontend_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"
@@ -23,6 +25,8 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
+        if self.database_url_override:
+            return self.database_url_override
         if not all((self.db_user, self.db_password, self.db_host)):
             return "sqlite:///./scorecard.db"
 

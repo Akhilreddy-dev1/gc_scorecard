@@ -22,6 +22,10 @@ The service must bind to `0.0.0.0` and Render's `$PORT`. The repository includes
 
 For separate frontend and backend deployments, set `VITE_API_URL` and `VITE_WS_URL` in the frontend build environment (see `frontend/.env.example`). Set `FRONTEND_ORIGINS` on the API to a comma-separated list of allowed frontend origins. The production frontend defaults to the Render service URL declared in `render.yaml`; confirm that this service is deployed and healthy before using the live site.
 
+### Connect Render to Supabase
+
+In the Supabase dashboard, open **Connect** and copy the database URI. For a long-running Render web service on IPv4, use the **Session pooler** URI; its host, username, and port differ from the project API URL. Set the full URI as Render's `DATABASE_URL` value. Do not use `<project-ref>.supabase.co` as the database host. The app requires SSL, uses a short connection timeout, and disables automatic prepared statements for compatibility with Supabase's transaction pooler.
+
 ## Backend
 
 Database tables and default scoring rules are initialized on startup. The API provides:
