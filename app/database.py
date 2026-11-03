@@ -18,9 +18,23 @@ def normalize_database_url(database_url: str) -> str:
     return database_url
 
 
+database_url = normalize_database_url(get_settings().database_url)
+is_postgres = database_url.startswith("postgresql+")
+
 engine = create_engine(
-    normalize_database_url(get_settings().database_url),
+    database_url,
     future=True,
+    pool_pre_ping=True,
+    connect_args=(
+        {
+            "connect_timeout": 10,
+            "sslmode": "require",
+            # Supabase's transaction pooler does not support prepared statements.
+            "prepare_threshold": None,
+        }
+        if is_postgres
+        else {}
+    ),
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
