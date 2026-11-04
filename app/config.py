@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     database_url_override: str | None = Field(default=None, validation_alias="DATABASE_URL")
+    redis_url: str | None = Field(default=None, validation_alias="REDIS_URL")
     db_user: str | None = None
     db_password: str | None = None
     db_host: str | None = None

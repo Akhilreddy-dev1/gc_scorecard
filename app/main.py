@@ -87,7 +87,7 @@ def create_app(
                 except (ValueError, ValidationError) as error:
                     await websocket.send_json({"error": str(error)})
         except WebSocketDisconnect:
-            manager.disconnect(group_id, websocket)
+            await manager.disconnect(group_id, websocket)
 
     return app
 

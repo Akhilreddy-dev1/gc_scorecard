@@ -21,9 +21,43 @@ export function useChatWebSocket(groupId: string, userId: string) {
   useEffect(() => {
     if (!groupId || !userId) return;
     let active = true;
-    const socket = new WebSocket(`${websocketBaseUrl}/ws/groups/${groupId}`);
-    socketRef.current = socket;
-    setConnectionState("connecting");
+    let retryTimer: number | undefined;
+    let retryCount = 0;
+
+    const connect = () => {
+      if (!active) return;
+      setConnectionState("connecting");
+      const socket = new WebSocket(`${websocketBaseUrl}/ws/groups/${groupId}`);
+      socketRef.current = socket;
+
+      socket.onopen = () => {
+        retryCount = 0;
+        setConnectionState("open");
+        setServerError("");
+      };
+      socket.onerror = () => {
+        setConnectionState("error");
+        setServerError("Live chat could not connect. Check the backend deployment and VITE_WS_URL.");
+      };
+      socket.onclose = () => {
+        if (!active) return;
+        setConnectionState("closed");
+        retryCount += 1;
+        const delay = Math.min(1000 * 2 ** (retryCount - 1), 15000);
+        retryTimer = window.setTimeout(connect, delay);
+      };
+      socket.onmessage = (message) => {
+        try {
+          const event = JSON.parse(message.data) as ChatBroadcast & { error?: string };
+          if (event.error) { setServerError(event.error); return; }
+          setServerError("");
+          setMessages((current) => [...current, event]);
+          if (event.live_scores) setScores(event.live_scores);
+        } catch {
+          setServerError("The server sent an unreadable live chat update.");
+        }
+      };
+    };
 
     fetch(`${apiBaseUrl}/api/groups/${groupId}/scores`)
       .then((response) => {
@@ -33,25 +67,13 @@ export function useChatWebSocket(groupId: string, userId: string) {
       .then((initialScores) => { if (active) setScores(initialScores); })
       .catch(() => { if (active) setScores([]); });
 
-    socket.onopen = () => setConnectionState("open");
-    socket.onerror = () => {
-      setConnectionState("error");
-      setServerError("Live chat could not connect. Check the backend deployment and VITE_WS_URL.");
+    connect();
+    return () => {
+      active = false;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      socketRef.current?.close();
+      socketRef.current = null;
     };
-    socket.onclose = () => setConnectionState("closed");
-    socket.onmessage = (message) => {
-      try {
-        const event = JSON.parse(message.data) as ChatBroadcast & { error?: string };
-        if (event.error) { setServerError(event.error); return; }
-        setServerError("");
-        setMessages((current) => [...current, event]);
-        if (event.live_scores) setScores(event.live_scores);
-      } catch {
-        setServerError("The server sent an unreadable live chat update.");
-      }
-    };
-
-    return () => { active = false; socket.close(); socketRef.current = null; };
   }, [groupId, userId]);
 
   const sendEvent = useCallback((event: Omit<ChatEvent, "user_id">) => {
