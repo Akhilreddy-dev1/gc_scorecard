@@ -67,6 +67,16 @@ def test_scoring_rules_endpoint_returns_defaults():
     }
 
 
+def test_health_endpoint():
+    app, _ = build_test_app()
+
+    with TestClient(app) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
 def test_websocket_event_updates_and_broadcasts_score():
     app, session_factory = build_test_app()
     user_id = uuid4()

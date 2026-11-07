@@ -9,6 +9,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base, SessionLocal, engine, get_db
+from app.config import get_settings
 from app.routers.scoring_rules import router as scoring_rules_router
 from app.seed import seed_scoring_rules
 from app.websocket_events import ChatEvent, record_event
@@ -37,11 +38,8 @@ def create_app(
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "https://frontend-wheat-gamma-11.vercel.app",
-        ],
+        allow_origins=get_settings().allowed_frontend_origins,
+        allow_origin_regex=r"https://[a-z0-9-]+\.vercel\.app",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -53,6 +51,10 @@ def create_app(
 
     app.dependency_overrides[get_db] = get_app_db
     app.include_router(scoring_rules_router)
+
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
 
     @app.websocket("/ws/groups/{group_id}")
     async def group_chat(websocket: WebSocket, group_id: str) -> None:

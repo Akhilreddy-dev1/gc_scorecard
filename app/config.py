@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     db_host: str | None = None
     db_port: int = 6543
     db_name: str = "postgres"
+    frontend_origins: str = (
+        "http://localhost:5173,"
+        "http://127.0.0.1:5173,"
+        "https://frontend-wheat-gamma-11.vercel.app"
+    )
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
@@ -23,6 +28,10 @@ class Settings(BaseSettings):
             f"postgresql+psycopg://{self.db_user}:{encoded_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
         )
+
+    @property
+    def allowed_frontend_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.frontend_origins.split(",") if origin.strip()]
 
 
 @lru_cache

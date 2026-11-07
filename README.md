@@ -14,6 +14,7 @@ For Render, use a Python Web Service with:
 - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
 The service must bind to `0.0.0.0` and Render's `$PORT`; otherwise Render reports that no port was found.
+The included `render.yaml` also configures `/health` as the Render health check and leaves database secrets for the Render dashboard.
 
 The backend creates the SQLAlchemy tables on startup and seeds these rules when they are missing:
 
