@@ -52,6 +52,14 @@ def create_app(
     app.dependency_overrides[get_db] = get_app_db
     app.include_router(scoring_rules_router)
 
+    @app.api_route("/", methods=["GET", "HEAD"])
+    def root() -> dict[str, str]:
+        return {
+            "service": "Gamified Group Chat API",
+            "docs": "/docs",
+            "health": "/health",
+        }
+
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}

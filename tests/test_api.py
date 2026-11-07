@@ -77,6 +77,18 @@ def test_health_endpoint():
     assert response.json() == {"status": "ok"}
 
 
+def test_root_endpoint_supports_service_probes():
+    app, _ = build_test_app()
+
+    with TestClient(app) as client:
+        get_response = client.get("/")
+        head_response = client.head("/")
+
+    assert get_response.status_code == 200
+    assert get_response.json()["health"] == "/health"
+    assert head_response.status_code == 200
+
+
 def test_websocket_event_updates_and_broadcasts_score():
     app, session_factory = build_test_app()
     user_id = uuid4()
