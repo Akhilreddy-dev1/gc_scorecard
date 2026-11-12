@@ -33,7 +33,7 @@ engine = create_engine(
             "prepare_threshold": None,
         }
         if is_postgres
-        else {}
+        else {"check_same_thread": False}
     ),
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
