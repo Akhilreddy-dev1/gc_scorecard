@@ -43,7 +43,8 @@ Use a Python Web Service with:
 - Build command: `pip install -r requirements.txt`
 - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
-The service must bind to `0.0.0.0` and Render's `$PORT`. The repository includes `render.yaml` for this configuration.
+The service must bind to `0.0.0.0` and Render's `$PORT`; otherwise Render reports that no port was found.
+The included `render.yaml` also configures `/health` as the Render health check and leaves database secrets for the Render dashboard.
 
 For separate frontend and backend deployments, set `VITE_API_URL` and `VITE_WS_URL` in the frontend build environment (see `frontend/.env.example`). Set `FRONTEND_ORIGINS` on the API to a comma-separated list of allowed frontend origins.
 

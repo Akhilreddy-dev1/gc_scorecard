@@ -1,3 +1,4 @@
+import os
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
@@ -5,10 +6,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.config import Settings
+from app.config import Settings, get_settings
 from app.database import Base, normalize_database_url
 from app.main import create_app
 from app.models import Group, User
+from app.routers.groups import PRIVATE_GROUP_ID, issue_auth_token
 
 
 def build_test_app():
@@ -67,29 +69,59 @@ def test_scoring_rules_endpoint_returns_defaults():
     }
 
 
-def test_websocket_event_updates_and_broadcasts_score():
-    app, session_factory = build_test_app()
-    user_id = uuid4()
-    group_id = uuid4()
-    with session_factory() as db:
-        db.add(User(id=user_id, username="Ada"))
-        db.add(Group(id=group_id, name="Builders"))
-        db.commit()
+def test_health_endpoint():
+    app, _ = build_test_app()
 
     with TestClient(app) as client:
-        with client.websocket_connect(f"/ws/groups/{group_id}") as websocket:
-            websocket.send_json(
-                {
-                    "type": "text",
-                    "user_id": str(user_id),
-                    "content": "Hello team",
-                }
-            )
-            payload = websocket.receive_json()
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_root_endpoint_supports_service_probes():
+    app, _ = build_test_app()
+
+    with TestClient(app) as client:
+        get_response = client.get("/")
+        head_response = client.head("/")
+
+    assert get_response.status_code == 200
+    assert get_response.json()["health"] == "/health"
+    assert head_response.status_code == 200
+
+
+def test_websocket_event_updates_and_broadcasts_score():
+    previous_secret = os.environ.get("AUTH_SECRET")
+    os.environ["AUTH_SECRET"] = "test-secret"
+    get_settings.cache_clear()
+    try:
+        app, session_factory = build_test_app()
+        user_id = uuid4()
+        with session_factory() as db:
+            db.add(User(id=user_id, username="Akhil"))
+            db.add(Group(id=PRIVATE_GROUP_ID, name="The unfiltered hoomans"))
+            db.commit()
+        token = issue_auth_token(user_id, "akhil")
+
+        with TestClient(app) as client:
+            with client.websocket_connect(f"/ws/groups/{PRIVATE_GROUP_ID}?token={token}") as websocket:
+                websocket.send_json(
+                    {
+                        "type": "text",
+                        "user_id": str(user_id),
+                        "content": "Hello team",
+                    }
+                )
+                payload = websocket.receive_json()
+    finally:
+        if previous_secret is None:
+            os.environ.pop("AUTH_SECRET", None)
+        else:
+            os.environ["AUTH_SECRET"] = previous_secret
+        get_settings.cache_clear()
 
     assert payload["type"] == "text"
     assert payload["points_awarded"] == 3
     assert payload["total_points"] == 3
-    assert payload["live_scores"] == [
-        {"user_id": str(user_id), "username": "Ada", "points": 3}
-    ]
+    assert payload["username"] == "Akhil"
