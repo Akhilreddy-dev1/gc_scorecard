@@ -29,7 +29,7 @@ PASSWORDS = {
     "binduja": "Binduja123",
     "haasini": "Haasini123",
     "shreeraj": "Shreeraj123",
-    "swejith": "Swejith123",
+    "swejith": "Sweju0401",
     "hasini": "Hasini123",
     "harini": "Harini123",
     "vaagdevi": "Vaagdevi123",
