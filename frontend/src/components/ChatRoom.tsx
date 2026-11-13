@@ -13,6 +13,7 @@ type ChatRoomProps = {
   typingNames: string[];
   isOwner: boolean;
   onTyping: (typing: boolean) => void;
+  onClearHistory: () => Promise<boolean>;
 };
 
 function safeReelEmbedUrl(url?: string): string | undefined {
@@ -32,9 +33,10 @@ function savedChatTheme() {
   catch { return "onyx"; }
 }
 
-export function ChatRoom({ messages, connectionState, serverError, onSend, typingNames, isOwner, onTyping }: ChatRoomProps) {
+export function ChatRoom({ messages, connectionState, serverError, onSend, typingNames, isOwner, onTyping, onClearHistory }: ChatRoomProps) {
   const [text, setText] = useState("");
   const [uploadError, setUploadError] = useState("");
+  const [historyError, setHistoryError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const sendText = () => {
@@ -85,6 +87,11 @@ export function ChatRoom({ messages, connectionState, serverError, onSend, typin
         </div>
         <span className={`status-dot status-${connectionState}`} aria-label={`Connection ${connectionState}`} />
       </div>
+      {isOwner && <div className="owner-history-actions"><button className="ghost-button" type="button" onClick={async () => {
+        if (!window.confirm("Delete all group chat history for everyone? This cannot be undone.")) return;
+        setHistoryError("");
+        if (!await onClearHistory()) setHistoryError("Could not delete chat history. Please try again.");
+      }}>Delete chat history</button>{historyError && <span className="error-message" role="alert">{historyError}</span>}</div>}
       <div className="message-list" aria-live="polite">
         {messages.map((message, index) => {
           const reelUrl = safeReelEmbedUrl(message.media_url ?? message.content);

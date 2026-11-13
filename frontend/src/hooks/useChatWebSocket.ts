@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiBaseUrl, backendIsConfigured, websocketBaseUrl } from "../config/api";
 
-export type ChatEventType = "text" | "reaction" | "media" | "reel_share" | "typing_start" | "typing_stop";
+export type ChatEventType = "text" | "reaction" | "media" | "reel_share" | "typing_start" | "typing_stop" | "history_cleared";
 export type ChatEvent = { type: ChatEventType; user_id: string; content?: string; message_id?: string; media_url?: string };
 export type LiveScore = { user_id: string; username: string; points: number };
 export type ChatBroadcast = ChatEvent & { username?: string; sent_at?: string; points_awarded?: number; total_points?: number; live_scores?: LiveScore[] };
@@ -54,6 +54,7 @@ export function useChatWebSocket(groupId: string, userId: string, token = "") {
           const event = JSON.parse(message.data) as ChatBroadcast & { error?: string };
           if (event.error) { setServerError(event.error); return; }
           setServerError("");
+          if (event.type === "history_cleared") { setMessages([]); return; }
           if (event.type === "typing_start" || event.type === "typing_stop") {
             setTypingNames((current) => event.type === "typing_start" ? [...new Set([...current, event.username ?? "A member"])] : current.filter((n) => n !== event.username));
             return;
@@ -74,6 +75,15 @@ export function useChatWebSocket(groupId: string, userId: string, token = "") {
       .then((initialScores) => { if (active) setScores(initialScores); })
       .catch(() => { if (active) setScores([]); });
 
+    fetch(`${apiBaseUrl}/api/groups/${groupId}/messages`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((response) => response.ok ? response.json() as Promise<ChatBroadcast[]> : [])
+      .then((history) => { if (active) setMessages((current) => {
+        const all = new Map<string, ChatBroadcast>();
+        [...history, ...current].forEach((item) => all.set(item.message_id ?? `${item.user_id}:${item.sent_at}`, item));
+        return [...all.values()].sort((a, b) => (a.sent_at ?? "").localeCompare(b.sent_at ?? ""));
+      }); })
+      .catch(() => { if (active) setServerError("Could not load saved chat history."); });
+
     connect();
     return () => {
       active = false;
@@ -93,5 +103,15 @@ export function useChatWebSocket(groupId: string, userId: string, token = "") {
     if (socketRef.current?.readyState === WebSocket.OPEN) socketRef.current.send(JSON.stringify({ type: typing ? "typing_start" : "typing_stop", user_id: userId }));
   }, [userId]);
 
-  return { messages, scores, serverError, connectionState, sendEvent, sendTyping, typingNames };
+  const clearHistory = useCallback(async () => {
+    const response = await fetch(`${apiBaseUrl}/api/groups/${groupId}/messages`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => null);
+    if (!response?.ok) return false;
+    setMessages([]);
+    return true;
+  }, [groupId, token]);
+
+  return { messages, scores, serverError, connectionState, sendEvent, sendTyping, typingNames, clearHistory };
 }
