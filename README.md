@@ -34,7 +34,19 @@ In the frontend Vercel project, set these **build** environment variables to the
 
 The frontend no longer silently falls back to the old Render URL. If these values are missing in production, login and chat show a backend configuration error. For Vercel Functions, enable Fluid compute for WebSocket routes; clients reconnect when a connection closes. Redis is needed to broadcast chat across function instances. See [Vercel's WebSocket guidance](https://vercel.com/kb/guide/do-vercel-serverless-functions-support-websocket-connections).
 
-For Render, use a Python Web Service with build command `pip install -r requirements.txt` and start command `uvicorn app.main:app --host 0.0.0.0 --port $PORT`. Add the same backend secrets above in the Render dashboard. Railway also uses the same start command; its deployment must expose the configured port.
+### Railway backend
+
+Create a Railway project from this GitHub repository and deploy the repository root as the backend service. Railway will install dependencies from `requirements.txt`; the root `Procfile` starts FastAPI on Railway's injected `$PORT`. In the Railway service's **Variables** panel, set:
+
+- `DATABASE_URL` — Supabase PostgreSQL Session Pooler URI.
+- `REDIS_URL` — TLS Redis URL beginning with `rediss://`.
+- `AUTH_SECRET` — a long random signing secret.
+- `MEMBER_PASSWORD_HASHES` — copy the full JSON value from the local `.env` after `MEMBER_PASSWORD_HASHES=`. The local legacy password setting was migrated to salted hashes. Do not commit `.env` or paste these values into GitHub.
+- `FRONTEND_ORIGINS=https://frontend-akhil-0cdc.vercel.app`
+
+Generate a Railway public domain for the backend, then set the frontend Vercel build variables `VITE_API_URL=https://<railway-domain>` and `VITE_WS_URL=wss://<railway-domain>`. Redeploy both services after setting their variables. Confirm `https://<railway-domain>/health` responds with `{"status":"ok"}`.
+
+For Render, use a Python Web Service with build command `pip install -r requirements.txt` and the same Uvicorn start command. Add the backend secrets in the Render dashboard.
 
 ## API
 
