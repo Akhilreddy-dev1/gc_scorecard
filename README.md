@@ -4,8 +4,8 @@ FastAPI backend and React frontend for the private group chat and scorecard.
 
 ## Local setup
 
-1. Copy `.env.example` to `.env` and set `AUTH_SECRET`, `MEMBER_PASSWORD_HASHES`, and database settings. Never commit `.env`.
-2. Generate member password hashes locally with `python -m app.passwords`. It prompts for each member password and prints the JSON value to put in the backend-only `MEMBER_PASSWORD_HASHES` variable. Passwords and hashes must never be put in frontend variables or source code.
+1. Copy `.env.example` to `.env` and set `AUTH_SECRET` and database settings. Never commit `.env`.
+2. Member passwords are currently hard-coded in `app/routers/groups.py`; no `MEMBER_PASSWORD_HASHES` variable is required. These passwords are visible in the repository source.
 3. Install and start the backend from the repository root:
 
    ```sh
@@ -24,7 +24,6 @@ The frontend is a separate Vercel project rooted at `frontend/`; its `vercel.jso
 - `DATABASE_URL`: Supabase PostgreSQL **Session pooler** URI from Supabase → Connect. This must be a PostgreSQL URI, not the Supabase HTTPS project URL.
 - `REDIS_URL`: TLS Redis URL (`rediss://...`) for broadcasts shared across backend instances.
 - `AUTH_SECRET`: a long random signing key. Generate one locally with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
-- `MEMBER_PASSWORD_HASHES`: JSON object printed by `python -m app.passwords`.
 - `FRONTEND_ORIGINS`: comma-separated frontend origins, including `https://frontend-akhil-0cdc.vercel.app` and any custom domain.
 
 In the frontend Vercel project, set these **build** environment variables to the deployed backend's domain (no trailing slash), then redeploy the frontend:
@@ -41,7 +40,6 @@ Create a Railway project from this GitHub repository and deploy the repository r
 - `DATABASE_URL` — Supabase PostgreSQL Session Pooler URI.
 - `REDIS_URL` — TLS Redis URL beginning with `rediss://`.
 - `AUTH_SECRET` — a long random signing secret.
-- `MEMBER_PASSWORD_HASHES` — copy the full JSON value from the local `.env` after `MEMBER_PASSWORD_HASHES=`. The local legacy password setting was migrated to salted hashes. Do not commit `.env` or paste these values into GitHub.
 - `FRONTEND_ORIGINS=https://frontend-akhil-0cdc.vercel.app`
 
 Generate a Railway public domain for the backend, then set the frontend Vercel build variables `VITE_API_URL=https://<railway-domain>` and `VITE_WS_URL=wss://<railway-domain>`. Redeploy both services after setting their variables. Confirm `https://<railway-domain>/health` responds with `{"status":"ok"}`.

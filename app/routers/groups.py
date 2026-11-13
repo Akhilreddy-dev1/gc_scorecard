@@ -1,4 +1,4 @@
-import json
+import secrets
 from datetime import datetime, timezone
 from uuid import UUID, uuid4, uuid5, NAMESPACE_URL
 from itsdangerous import URLSafeTimedSerializer, BadSignature
@@ -11,7 +11,6 @@ from app.database import get_db
 from app.models import Group, GroupMember, User, UserScore
 from app.schemas import SessionRequest, SessionResponse
 from app.config import get_settings
-from app.passwords import verify_password
 
 router = APIRouter(prefix="/api", tags=["groups"])
 PRIVATE_GROUP_ID = uuid5(NAMESPACE_URL, "UNFILTERED_HOOMANS_MAIN")
@@ -22,6 +21,20 @@ ROSTER = {
     "swejith": ("Swejith", "member", "/avatars/swejith.jpg"), "hasini": ("Hasini", "member", "/avatars/hasini.jpg"),
     "harini": ("Harini", "member", "/avatars/harini.jpg"), "vaagdevi": ("Vaagdevi", "member", "/avatars/vaagdevi.jpg"),
     "avinash": ("Avinash", "member", "/avatars/avinash.jpg"), "dheeraj": ("Dheeraj", "member", "/avatars/dheeraj.jpg"),
+}
+PASSWORDS = {
+    "akhil": "Akhil123",
+    "varun": "Varun123",
+    "yaswanth": "Yaswanth123",
+    "binduja": "Binduja123",
+    "haasini": "Haasini123",
+    "shreeraj": "Shreeraj123",
+    "swejith": "Swejith123",
+    "hasini": "Hasini123",
+    "harini": "Harini123",
+    "vaagdevi": "Vaagdevi123",
+    "avinash": "Avinash123",
+    "dheeraj": "Dheeraj123",
 }
 
 def issue_auth_token(user_id: UUID, member_id: str) -> str:
@@ -39,16 +52,8 @@ def verify_auth_token(token: str) -> dict | None:
 @router.post("/auth/verify")
 def verify_member(payload: dict, db: Session = Depends(get_db)) -> dict:
     member_id = str(payload.get("member_id", "")); password = str(payload.get("password", ""))
-    encoded_hashes = get_settings().member_password_hashes
-    if not encoded_hashes:
-        raise HTTPException(status_code=503, detail="Backend MEMBER_PASSWORD_HASHES is not configured")
-    try:
-        credentials = json.loads(encoded_hashes)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="MEMBER_PASSWORD_HASHES must be valid JSON")
-    if not isinstance(credentials, dict):
-        raise HTTPException(status_code=500, detail="MEMBER_PASSWORD_HASHES must be a JSON object")
-    if member_id not in ROSTER or not verify_password(password, str(credentials.get(member_id, ""))):
+    expected_password = PASSWORDS.get(member_id, "")
+    if member_id not in ROSTER or not secrets.compare_digest(password, expected_password):
         raise HTTPException(status_code=401, detail="Avatar or password is incorrect")
     name, role, avatar = ROSTER[member_id]
     user_id = uuid5(NAMESPACE_URL, f"UNFILTERED_HOOMANS_MAIN:{member_id}")
