@@ -1,5 +1,4 @@
 import json
-import secrets
 from datetime import datetime, timezone
 from uuid import UUID, uuid4, uuid5, NAMESPACE_URL
 from itsdangerous import URLSafeTimedSerializer, BadSignature
@@ -12,6 +11,7 @@ from app.database import get_db
 from app.models import Group, GroupMember, User, UserScore
 from app.schemas import SessionRequest, SessionResponse
 from app.config import get_settings
+from app.passwords import verify_password
 
 router = APIRouter(prefix="/api", tags=["groups"])
 PRIVATE_GROUP_ID = uuid5(NAMESPACE_URL, "UNFILTERED_HOOMANS_MAIN")
@@ -39,9 +39,16 @@ def verify_auth_token(token: str) -> dict | None:
 @router.post("/auth/verify")
 def verify_member(payload: dict, db: Session = Depends(get_db)) -> dict:
     member_id = str(payload.get("member_id", "")); password = str(payload.get("password", ""))
-    try: credentials = json.loads(get_settings().member_passwords)
-    except json.JSONDecodeError: raise HTTPException(status_code=500, detail="MEMBER_PASSWORDS must be valid JSON")
-    if member_id not in ROSTER or not secrets.compare_digest(password, str(credentials.get(member_id, ""))):
+    encoded_hashes = get_settings().member_password_hashes
+    if not encoded_hashes:
+        raise HTTPException(status_code=503, detail="Backend MEMBER_PASSWORD_HASHES is not configured")
+    try:
+        credentials = json.loads(encoded_hashes)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="MEMBER_PASSWORD_HASHES must be valid JSON")
+    if not isinstance(credentials, dict):
+        raise HTTPException(status_code=500, detail="MEMBER_PASSWORD_HASHES must be a JSON object")
+    if member_id not in ROSTER or not verify_password(password, str(credentials.get(member_id, ""))):
         raise HTTPException(status_code=401, detail="Avatar or password is incorrect")
     name, role, avatar = ROSTER[member_id]
     user_id = uuid5(NAMESPACE_URL, f"UNFILTERED_HOOMANS_MAIN:{member_id}")

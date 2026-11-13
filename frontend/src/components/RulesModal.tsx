@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
+import { apiBaseUrl } from "../config/api";
 
 type ScoringRule = { action: string; points: number; description?: string };
-
-const apiBaseUrl = import.meta.env.VITE_API_URL ?? "";
 
 export function RulesModal() {
   const [rules, setRules] = useState<ScoringRule[]>([]);

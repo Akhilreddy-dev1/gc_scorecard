@@ -1,65 +1,45 @@
 # Gamified Group Chat
 
-## Private group Vercel configuration
+FastAPI backend and React frontend for the private group chat and scorecard.
 
-The backend login endpoint verifies avatar passwords server-side. Configure backend-only environment variables in Vercel:
+## Local setup
 
-- `MEMBER_PASSWORDS`: JSON object keyed by member id (`akhil`, `varun`, `yaswanth`, `binduja`, `haasini`, `shreeraj`, `swejith`, `hasini`, `harini`, `vaagdevi`, `avinash`, `dheeraj`). Store the assigned passwords as Vercel secrets; do not add them to frontend variables or source files.
-- `AUTH_SECRET`: long random signing secret for login sessions.
-- `DATABASE_URL`, `REDIS_URL`, and `FRONTEND_ORIGINS` as described below.
+1. Copy `.env.example` to `.env` and set `AUTH_SECRET`, `MEMBER_PASSWORD_HASHES`, and database settings. Never commit `.env`.
+2. Generate member password hashes locally with `python -m app.passwords`. It prompts for each member password and prints the JSON value to put in the backend-only `MEMBER_PASSWORD_HASHES` variable. Passwords and hashes must never be put in frontend variables or source code.
+3. Install and start the backend from the repository root:
 
-The frontend is a separate Vercel project rooted at `frontend/`; `frontend/vercel.json` rewrites direct routes such as `/scorecard` to the SPA.
+   ```sh
+   python -m pip install -r requirements.txt
+   uvicorn app.main:app --reload
+   ```
 
-FastAPI and React app for a group chat where messages and media activity award configurable points.
-
-## Run locally
-
-1. Copy `.env.example` to `.env`. Leave database values blank for SQLite, or set the separate Supabase/Postgres values. Database passwords are URL-encoded by the app.
-2. Install backend dependencies: `python -m pip install -r requirements.txt`.
-3. Start the API from the repository root: `uvicorn app.main:app --reload`.
 4. In another terminal, run `cd frontend && npm install && npm run dev`.
 
-The Vite development server proxies API and WebSocket requests to `http://localhost:8000`. Open the URL printed by Vite, enter your name, then choose **Create room** and provide a room name, or choose **Join room** and enter a teammate's room code. A room code is a UUID and can be shared from the room header.
+The Vite development proxy sends `/api`, `/health`, and `/ws` to `http://localhost:8000`, which is the Uvicorn default. The backend requires a database connection and initializes its tables at startup. `GET /health` checks the database and returns HTTP 503 when it cannot connect.
 
-## Deploy the backend to Vercel
+## Deploy
 
-Create a separate Vercel project for the backend from this repository:
+The frontend is a separate Vercel project rooted at `frontend/`; its `vercel.json` rewrites app routes such as `/scorecard` to the SPA. The backend can run on Vercel Functions or a persistent Python host. Configure these **backend-only** environment variables on the backend deployment:
 
-1. Import the GitHub repository again in Vercel and set **Root Directory** to the repository root. Keep the existing frontend Vercel project rooted at `frontend/`.
-2. Vercel detects the FastAPI app through `pyproject.toml` and deploys it as a Python Function. No Uvicorn start command or port setting is needed.
-3. Add these environment variables to the backend Vercel project for Production and Preview:
-   - `DATABASE_URL`: the Supabase **Session pooler** PostgreSQL URI from **Supabase → Connect**. This is the database URI, not the `https://<project-ref>.supabase.co` API URL.
-   - `REDIS_URL`: a TLS Redis connection URI from a Redis provider such as Upstash, used as the shared channel for room chat across Vercel Function instances.
-   - `FRONTEND_ORIGINS`: comma-separated frontend origins, including `https://frontend-akhil-0cdc.vercel.app` and any custom domain.
-4. Deploy and confirm `https://<backend-project>.vercel.app/health` returns `{"status":"ok"}`.
-5. In the frontend Vercel project, set `VITE_API_URL=https://<backend-project>.vercel.app` and `VITE_WS_URL=wss://<backend-project>.vercel.app` for Production and Preview, then redeploy the frontend.
+- `DATABASE_URL`: Supabase PostgreSQL **Session pooler** URI from Supabase → Connect. This must be a PostgreSQL URI, not the Supabase HTTPS project URL.
+- `REDIS_URL`: TLS Redis URL (`rediss://...`) for broadcasts shared across backend instances.
+- `AUTH_SECRET`: a long random signing key. Generate one locally with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+- `MEMBER_PASSWORD_HASHES`: JSON object printed by `python -m app.passwords`.
+- `FRONTEND_ORIGINS`: comma-separated frontend origins, including `https://frontend-akhil-0cdc.vercel.app` and any custom domain.
 
-Redis is required for reliable chat delivery across separate Vercel Function instances. Without it, the fallback broadcasts only to sockets connected to the same instance. The frontend reconnects automatically if Vercel closes a long-running WebSocket connection.
+In the frontend Vercel project, set these **build** environment variables to the deployed backend's domain (no trailing slash), then redeploy the frontend:
 
-## Deploy the backend to Render
+- `VITE_API_URL=https://<backend-domain>`
+- `VITE_WS_URL=wss://<backend-domain>`
 
-Use a Python Web Service with:
+The frontend no longer silently falls back to the old Render URL. If these values are missing in production, login and chat show a backend configuration error. For Vercel Functions, enable Fluid compute for WebSocket routes; clients reconnect when a connection closes. Redis is needed to broadcast chat across function instances. See [Vercel's WebSocket guidance](https://vercel.com/kb/guide/do-vercel-serverless-functions-support-websocket-connections).
 
-- Build command: `pip install -r requirements.txt`
-- Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+For Render, use a Python Web Service with build command `pip install -r requirements.txt` and start command `uvicorn app.main:app --host 0.0.0.0 --port $PORT`. Add the same backend secrets above in the Render dashboard. Railway also uses the same start command; its deployment must expose the configured port.
 
-The service must bind to `0.0.0.0` and Render's `$PORT`; otherwise Render reports that no port was found.
-The included `render.yaml` also configures `/health` as the Render health check and leaves database secrets for the Render dashboard.
+## API
 
-For separate frontend and backend deployments, set `VITE_API_URL` and `VITE_WS_URL` in the frontend build environment (see `frontend/.env.example`). Set `FRONTEND_ORIGINS` on the API to a comma-separated list of allowed frontend origins.
-
-### Connect Render to Supabase
-
-In the Supabase dashboard, open **Connect** and copy the database URI. For a long-running Render web service on IPv4, use the **Session pooler** URI; its host, username, and port differ from the project API URL. Set the full URI as Render's `DATABASE_URL` value. Do not use `<project-ref>.supabase.co` as the database host. The app requires SSL, uses a short connection timeout, and disables automatic prepared statements for compatibility with Supabase's transaction pooler.
-
-## Backend
-
-Database tables and default scoring rules are initialized on startup. The API provides:
-
-- `GET /health` for a health check
-- `POST /api/session` to create or join a room and establish a user
-- `GET /api/groups/{group_id}/scores` to load the persisted leaderboard
-- `GET /api/scoring-rules` to load the current rules
-- `WS /ws/groups/{group_id}` for real-time chat and score updates
-
-Default points are 3 for text messages, 1 for reactions, 4 for media uploads, and 5 for reel shares. Image/video uploads are shared in memory as data URLs, with a 2 MB client-side size limit; score totals persist in the configured database.
+- `GET /health` — checks database connectivity.
+- `POST /api/auth/verify` — verifies an avatar password and returns a signed session.
+- `GET /api/groups/{group_id}/scores` — reads the persisted leaderboard.
+- `GET /api/scoring-rules` — reads scoring rules.
+- `WS /ws/groups/{group_id}` — private chat, media, typing, and score events.

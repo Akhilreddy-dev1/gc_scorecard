@@ -5,10 +5,10 @@ import { Leaderboard } from "./components/Leaderboard";
 import { RulesModal } from "./components/RulesModal";
 import { members, type GroupMember } from "./config/membersConfig";
 import { RESULTS_UNLOCK_DATE } from "./config/releaseConfig";
+import { apiBaseUrl, backendIsConfigured } from "./config/api";
 import { useChatWebSocket } from "./hooks/useChatWebSocket";
 
 type Session = { user_id: string; username: string; group_id: string; group_name: string; access_token: string; member: GroupMember };
-const apiBaseUrl = (import.meta.env.VITE_API_URL || (import.meta.env.PROD ? "https://gc-scorecard-api.onrender.com" : "")).replace(/\/$/, "");
 function readSession(): Session | null { try { const raw = localStorage.getItem("gc-scorecard-private-session"); return raw ? JSON.parse(raw) as Session : null; } catch { return null; } }
 
 function PhotoAvatar({ member, onError, small = false }: { member: GroupMember; onError?: () => void; small?: boolean }) {
@@ -36,10 +36,11 @@ export default function App() {
     event.preventDefault(); if (!selected) return;
     setBusy(true); setError("");
     try {
+      if (!backendIsConfigured) throw new Error("Backend is not connected. Set VITE_API_URL in the frontend deployment and redeploy.");
       const response = await fetch(`${apiBaseUrl}/api/auth/verify`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ member_id: selected.id, password }) });
-      const body = await response.json(); if (!response.ok) throw new Error(body.detail ?? "Login failed");
+      const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.detail ?? `Backend login failed (${response.status})`);
       const next: Session = { ...body, member: selected }; localStorage.setItem("gc-scorecard-private-session", JSON.stringify(next)); setSession(next); setPassword("");
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not sign in"); }
+    } catch (e) { setError(e instanceof TypeError ? "Could not reach the backend. Check VITE_API_URL and the backend service status." : e instanceof Error ? e.message : "Could not sign in"); }
     finally { setBusy(false); }
   }
   function lock() { localStorage.removeItem("gc-scorecard-private-session"); setSession(null); setSelected(null); setPassword(""); setPage("login"); }

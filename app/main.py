@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -64,7 +66,15 @@ def create_app(
         }
 
     @app.get("/health")
-    def health() -> dict[str, str]:
+    def health():
+        try:
+            with database_engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+        except Exception:
+            return JSONResponse(
+                status_code=503,
+                content={"status": "error", "database": "unavailable"},
+            )
         return {"status": "ok"}
 
     @app.websocket("/ws/groups/{group_id}")
