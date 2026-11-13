@@ -1,5 +1,15 @@
 # Gamified Group Chat
 
+## Private group Vercel configuration
+
+The backend login endpoint verifies avatar passwords server-side. Configure backend-only environment variables in Vercel:
+
+- `MEMBER_PASSWORDS`: JSON object keyed by member id (`akhil`, `varun`, `yaswanth`, `binduja`, `haasini`, `shreeraj`, `swejith`, `hasini`, `harini`, `vaagdevi`, `avinash`, `dheeraj`). Store the assigned passwords as Vercel secrets; do not add them to frontend variables or source files.
+- `AUTH_SECRET`: long random signing secret for login sessions.
+- `DATABASE_URL`, `REDIS_URL`, and `FRONTEND_ORIGINS` as described below.
+
+The frontend is a separate Vercel project rooted at `frontend/`; `frontend/vercel.json` rewrites direct routes such as `/scorecard` to the SPA.
+
 FastAPI and React app for a group chat where messages and media activity award configurable points.
 
 ## Run locally

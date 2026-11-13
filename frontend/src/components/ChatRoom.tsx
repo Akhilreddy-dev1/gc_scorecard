@@ -10,9 +10,17 @@ type ChatRoomProps = {
     content?: string;
     media_url?: string;
   }) => boolean;
+  typingNames: string[];
+  isOwner: boolean;
+  onTyping: (typing: boolean) => void;
 };
 
-export function ChatRoom({ messages, connectionState, serverError, onSend }: ChatRoomProps) {
+function savedChatTheme() {
+  try { return localStorage.getItem("gc-scorecard-chat-theme") ?? "onyx"; }
+  catch { return "onyx"; }
+}
+
+export function ChatRoom({ messages, connectionState, serverError, onSend, typingNames, isOwner, onTyping }: ChatRoomProps) {
   const [text, setText] = useState("");
   const [uploadError, setUploadError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -20,7 +28,7 @@ export function ChatRoom({ messages, connectionState, serverError, onSend }: Cha
   const sendText = () => {
     const content = text.trim();
     if (!content) return;
-    if (onSend({ type: "text", content })) setText("");
+    if (onSend({ type: "text", content })) { setText(""); onTyping(false); }
     else setUploadError("Chat is reconnecting. Try sending again in a moment.");
   };
 
@@ -52,21 +60,25 @@ export function ChatRoom({ messages, connectionState, serverError, onSend }: Cha
 
   return (
     <section className="glass-panel placeholder-panel" aria-labelledby="chat-room-title">
-      <p className="eyebrow">ROOM / GENERAL</p>
+      <fieldset className="theme-options">
+        <legend>Chat theme</legend>
+        <label><input type="radio" name="chat-theme" value="onyx" defaultChecked={savedChatTheme() === "onyx"} onChange={() => localStorage.setItem("gc-scorecard-chat-theme", "onyx")} /><span>Onyx</span></label>
+        <label><input type="radio" name="chat-theme" value="garnet" defaultChecked={savedChatTheme() === "garnet"} onChange={() => localStorage.setItem("gc-scorecard-chat-theme", "garnet")} /><span>Garnet</span></label>
+        <label><input type="radio" name="chat-theme" value="pine" defaultChecked={savedChatTheme() === "pine"} onChange={() => localStorage.setItem("gc-scorecard-chat-theme", "pine")} /><span>Pine</span></label>
+        <label><input type="radio" name="chat-theme" value="turquoise" defaultChecked={savedChatTheme() === "turquoise"} onChange={() => localStorage.setItem("gc-scorecard-chat-theme", "turquoise")} /><span>Turquoise</span></label>
+      </fieldset>
       <div className="section-heading">
         <div>
           <h2 id="chat-room-title">Group chat</h2>
-          <p className="muted">{connectionState}</p>
         </div>
         <span className={`status-dot status-${connectionState}`} aria-label={`Connection ${connectionState}`} />
       </div>
       <div className="message-list" aria-live="polite">
-        {messages.length === 0 && <p className="muted empty-state">Start the conversation.</p>}
         {messages.map((message, index) => (
           <article className="chat-bubble" key={`${message.user_id}-${index}`}>
             <div className="bubble-meta">
-              <strong>{message.user_id.slice(0, 8)}</strong>
-              {message.points_awarded ? <span>+{message.points_awarded} pts</span> : null}
+              <strong>{message.username ?? message.user_id.slice(0, 8)}</strong>
+              {isOwner && message.sent_at && <time>{new Date(message.sent_at).toLocaleTimeString()}</time>}
             </div>
             {message.media_url?.startsWith("data:image/") ? (
               <img className="shared-media" src={message.media_url} alt={message.content ?? "Shared image"} />
@@ -88,15 +100,16 @@ export function ChatRoom({ messages, connectionState, serverError, onSend }: Cha
         ))}
       </div>
       {serverError && <p className="error-message" role="alert">{serverError}</p>}
+      {isOwner && typingNames.length > 0 && <div className="typing-pill">{typingNames.join(", ")} {typingNames.length === 1 ? "is" : "are"} typing...</div>}
       <form className="composer" onSubmit={(event) => { event.preventDefault(); sendText(); }}>
         <label className="sr-only" htmlFor="message-input">Message</label>
         <input
           id="message-input"
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => { setText(event.target.value); onTyping(Boolean(event.target.value)); }}
           placeholder="Write a message…"
         />
-        <button type="submit" disabled={connectionState !== "open"}>Send</button>
+        <button className="send-button" type="submit" disabled={connectionState !== "open"} aria-label="Send message" title="Send message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.5 2.5 14.8 21a1 1 0 0 1-1.9.05l-3.4-7.3-7.3-3.4a1 1 0 0 1 .05-1.9l18.5-6.7a.6.6 0 0 1 .75.75ZM9.5 13.5l4.2 1.95 3.8-10.45L7.05 8.8 9 13l6-5.5-5.5 6Z" /></svg></button>
         <input
           ref={fileInputRef}
           className="sr-only"
@@ -104,8 +117,8 @@ export function ChatRoom({ messages, connectionState, serverError, onSend }: Cha
           accept="image/*,video/*"
           onChange={(event) => uploadMedia(event.target.files?.[0])}
         />
-        <button className="ghost-button" type="button" disabled={connectionState !== "open"} onClick={() => fileInputRef.current?.click()}>
-          Media
+        <button className="media-button" type="button" disabled={connectionState !== "open"} onClick={() => fileInputRef.current?.click()} aria-label="Add photo or video" title="Add photo or video">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
         </button>
       </form>
       {uploadError && <p className="error-message" role="alert">{uploadError}</p>}

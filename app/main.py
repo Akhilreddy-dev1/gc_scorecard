@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from uuid import UUID
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi import WebSocket, WebSocketDisconnect
@@ -10,7 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine, get_db
-from app.routers.groups import router as groups_router
+from app.routers.groups import router as groups_router, ROSTER, PRIVATE_GROUP_ID, verify_auth_token
 from app.routers.scoring_rules import router as scoring_rules_router
 from app.seed import seed_scoring_rules
 from app.websocket_events import ChatEvent, record_event
@@ -60,11 +61,22 @@ def create_app(
 
     @app.websocket("/ws/groups/{group_id}")
     async def group_chat(websocket: WebSocket, group_id: str) -> None:
+        auth = verify_auth_token(websocket.query_params.get("token", ""))
+        if not auth or auth.get("member_id") not in ROSTER or group_id != str(PRIVATE_GROUP_ID):
+            await websocket.close(code=4401)
+            return
+        username = ROSTER[auth["member_id"]][0]
         await manager.connect(group_id, websocket)
         try:
             while True:
                 try:
                     event = ChatEvent.model_validate(await websocket.receive_json())
+                    if event.user_id != UUID(auth["user_id"]):
+                        await websocket.send_json({"error": "Session identity mismatch"})
+                        continue
+                    if event.event_type in {"typing_start", "typing_stop"}:
+                        await manager.broadcast(group_id, {"type": event.event_type, "username": username})
+                        continue
                     with session_factory() as db:
                         points_awarded, total_points, live_scores = record_event(
                             db,
@@ -76,12 +88,13 @@ def create_app(
                         {
                             "type": event.event_type,
                             "user_id": str(event.user_id),
+                            "username": username,
+                            "sent_at": datetime.now(timezone.utc).isoformat(),
                             "content": event.content,
                             "message_id": event.message_id,
                             "media_url": event.media_url,
                             "points_awarded": points_awarded,
                             "total_points": total_points,
-                            "live_scores": live_scores,
                         },
                     )
                 except (ValueError, ValidationError) as error:
