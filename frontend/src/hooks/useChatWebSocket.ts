@@ -1,75 +1,95 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type ChatEventType = "text" | "reaction" | "media" | "reel_share";
-
-export type ChatEvent = {
-  type: ChatEventType;
-  user_id: string;
-  content?: string;
-  message_id?: string;
-  media_url?: string;
-};
-
-export type LiveScore = {
-  user_id: string;
-  username: string;
-  points: number;
-};
-
-export type ChatBroadcast = ChatEvent & {
-  error?: string;
-  points_awarded?: number;
-  total_points?: number;
-  live_scores?: LiveScore[];
-};
-
+export type ChatEventType = "text" | "reaction" | "media" | "reel_share" | "typing_start" | "typing_stop";
+export type ChatEvent = { type: ChatEventType; user_id: string; content?: string; message_id?: string; media_url?: string };
+export type LiveScore = { user_id: string; username: string; points: number };
+export type ChatBroadcast = ChatEvent & { username?: string; sent_at?: string; points_awarded?: number; total_points?: number; live_scores?: LiveScore[] };
 type ConnectionState = "connecting" | "open" | "closed" | "error";
 
-const websocketBaseUrl =
-  import.meta.env.VITE_WS_URL ??
-  (import.meta.env.DEV ? "ws://localhost:8000" : "");
+const apiBaseUrl = (import.meta.env.VITE_API_URL || (import.meta.env.PROD ? "https://gc-scorecard-api.onrender.com" : "")).replace(/\/$/, "");
+const websocketBaseUrl = import.meta.env.VITE_WS_URL || (apiBaseUrl
+  ? apiBaseUrl.replace(/^http/, "ws")
+  : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`);
 
-export function useChatWebSocket(groupId: string, userId: string) {
+export function useChatWebSocket(groupId: string, userId: string, token = "") {
   const socketRef = useRef<WebSocket | null>(null);
   const [messages, setMessages] = useState<ChatBroadcast[]>([]);
   const [scores, setScores] = useState<LiveScore[]>([]);
-  const [connectionState, setConnectionState] =
-    useState<ConnectionState>("connecting");
+  const [serverError, setServerError] = useState("");
+  const [connectionState, setConnectionState] = useState<ConnectionState>("closed");
+  const [typingNames, setTypingNames] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!websocketBaseUrl) {
-      setConnectionState("error");
-      return;
-    }
+    if (!groupId || !userId) return;
+    let active = true;
+    let retryTimer: number | undefined;
+    let retryCount = 0;
 
-    const socket = new WebSocket(`${websocketBaseUrl}/ws/groups/${groupId}`);
-    socketRef.current = socket;
-    setConnectionState("connecting");
+    const connect = () => {
+      if (!active) return;
+      setConnectionState("connecting");
+      const socket = new WebSocket(`${websocketBaseUrl}/ws/groups/${groupId}?token=${encodeURIComponent(token)}`);
+      socketRef.current = socket;
 
-    socket.onopen = () => setConnectionState("open");
-    socket.onerror = () => setConnectionState("error");
-    socket.onclose = () => setConnectionState("closed");
-    socket.onmessage = (message) => {
-      const event = JSON.parse(message.data) as ChatBroadcast;
-      if (event.error) return;
-      setMessages((current) => [...current, event]);
-      if (event.live_scores) setScores(event.live_scores);
+      socket.onopen = () => {
+        retryCount = 0;
+        setConnectionState("open");
+        setServerError("");
+      };
+      socket.onerror = () => {
+        setConnectionState("error");
+        setServerError("Live chat could not connect. Check the backend deployment and VITE_WS_URL.");
+      };
+      socket.onclose = () => {
+        if (!active) return;
+        setConnectionState("closed");
+        retryCount += 1;
+        const delay = Math.min(1000 * 2 ** (retryCount - 1), 15000);
+        retryTimer = window.setTimeout(connect, delay);
+      };
+      socket.onmessage = (message) => {
+        try {
+          const event = JSON.parse(message.data) as ChatBroadcast & { error?: string };
+          if (event.error) { setServerError(event.error); return; }
+          setServerError("");
+          if (event.type === "typing_start" || event.type === "typing_stop") {
+            setTypingNames((current) => event.type === "typing_start" ? [...new Set([...current, event.username ?? "A member"])] : current.filter((n) => n !== event.username));
+            return;
+          }
+          setMessages((current) => [...current, event]);
+          if (event.live_scores) setScores(event.live_scores);
+        } catch {
+          setServerError("The server sent an unreadable live chat update.");
+        }
+      };
     };
 
+    fetch(`${apiBaseUrl}/api/groups/${groupId}/scores`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((response) => {
+        if (!response.ok) throw new Error("Unable to load scores");
+        return response.json() as Promise<LiveScore[]>;
+      })
+      .then((initialScores) => { if (active) setScores(initialScores); })
+      .catch(() => { if (active) setScores([]); });
+
+    connect();
     return () => {
-      socket.close();
+      active = false;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [groupId]);
+  }, [groupId, userId, token]);
 
-  const sendEvent = useCallback(
-    (event: Omit<ChatEvent, "user_id">) => {
-      if (socketRef.current?.readyState !== WebSocket.OPEN) return false;
-      socketRef.current.send(JSON.stringify({ ...event, user_id: userId }));
-      return true;
-    },
-    [userId],
-  );
+  const sendEvent = useCallback((event: Omit<ChatEvent, "user_id">) => {
+    if (socketRef.current?.readyState !== WebSocket.OPEN) return false;
+    socketRef.current.send(JSON.stringify({ ...event, user_id: userId }));
+    return true;
+  }, [userId]);
 
-  return { messages, scores, connectionState, sendEvent };
+  const sendTyping = useCallback((typing: boolean) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) socketRef.current.send(JSON.stringify({ type: typing ? "typing_start" : "typing_stop", user_id: userId }));
+  }, [userId]);
+
+  return { messages, scores, serverError, connectionState, sendEvent, sendTyping, typingNames };
 }
