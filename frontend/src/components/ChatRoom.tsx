@@ -15,6 +15,18 @@ type ChatRoomProps = {
   onTyping: (typing: boolean) => void;
 };
 
+function safeReelEmbedUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return undefined;
+    const allowedHosts = new Set(["instagram.com", "www.instagram.com", "youtube.com", "www.youtube.com", "youtu.be"]);
+    return allowedHosts.has(parsed.hostname) ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function savedChatTheme() {
   try { return localStorage.getItem("gc-scorecard-chat-theme") ?? "onyx"; }
   catch { return "onyx"; }
@@ -74,8 +86,10 @@ export function ChatRoom({ messages, connectionState, serverError, onSend, typin
         <span className={`status-dot status-${connectionState}`} aria-label={`Connection ${connectionState}`} />
       </div>
       <div className="message-list" aria-live="polite">
-        {messages.map((message, index) => (
-          <article className="chat-bubble" key={`${message.user_id}-${index}`}>
+        {messages.map((message, index) => {
+          const reelUrl = safeReelEmbedUrl(message.media_url ?? message.content);
+          return (
+            <article className="chat-bubble" key={`${message.user_id}-${index}`}>
             <div className="bubble-meta">
               <strong>{message.username ?? message.user_id.slice(0, 8)}</strong>
               {isOwner && message.sent_at && <time>{new Date(message.sent_at).toLocaleTimeString()}</time>}
@@ -84,10 +98,10 @@ export function ChatRoom({ messages, connectionState, serverError, onSend, typin
               <img className="shared-media" src={message.media_url} alt={message.content ?? "Shared image"} />
             ) : message.media_url?.startsWith("data:video/") ? (
               <video className="shared-media" src={message.media_url} controls aria-label={message.content ?? "Shared video"} />
-            ) : message.type === "reel_share" && (message.media_url ?? message.content) ? (
+            ) : message.type === "reel_share" && reelUrl ? (
               <iframe
                 className="reel-player"
-                src={message.media_url ?? message.content}
+                src={reelUrl}
                 title={`Reel shared by ${message.user_id.slice(0, 8)}`}
                 loading="lazy"
                 allow="autoplay; encrypted-media; picture-in-picture"
@@ -96,8 +110,9 @@ export function ChatRoom({ messages, connectionState, serverError, onSend, typin
             ) : (
               <p>{message.content ?? message.media_url ?? message.type}</p>
             )}
-          </article>
-        ))}
+            </article>
+          );
+        })}
       </div>
       {serverError && <p className="error-message" role="alert">{serverError}</p>}
       {isOwner && typingNames.length > 0 && <div className="typing-pill">{typingNames.join(", ")} {typingNames.length === 1 ? "is" : "are"} typing...</div>}
