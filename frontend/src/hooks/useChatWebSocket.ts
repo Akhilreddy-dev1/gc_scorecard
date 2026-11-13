@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type ChatEventType = "text" | "reaction" | "media" | "reel_share";
+export type ChatEventType = "text" | "reaction" | "media" | "reel_share" | "typing_start" | "typing_stop";
 export type ChatEvent = { type: ChatEventType; user_id: string; content?: string; message_id?: string; media_url?: string };
 export type LiveScore = { user_id: string; username: string; points: number };
-export type ChatBroadcast = ChatEvent & { points_awarded?: number; total_points?: number; live_scores?: LiveScore[] };
+export type ChatBroadcast = ChatEvent & { username?: string; sent_at?: string; points_awarded?: number; total_points?: number; live_scores?: LiveScore[] };
 type ConnectionState = "connecting" | "open" | "closed" | "error";
 
 const apiBaseUrl = (import.meta.env.VITE_API_URL || (import.meta.env.PROD ? "https://gc-scorecard-api.onrender.com" : "")).replace(/\/$/, "");
@@ -11,12 +11,13 @@ const websocketBaseUrl = import.meta.env.VITE_WS_URL || (apiBaseUrl
   ? apiBaseUrl.replace(/^http/, "ws")
   : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`);
 
-export function useChatWebSocket(groupId: string, userId: string) {
+export function useChatWebSocket(groupId: string, userId: string, token = "") {
   const socketRef = useRef<WebSocket | null>(null);
   const [messages, setMessages] = useState<ChatBroadcast[]>([]);
   const [scores, setScores] = useState<LiveScore[]>([]);
   const [serverError, setServerError] = useState("");
   const [connectionState, setConnectionState] = useState<ConnectionState>("closed");
+  const [typingNames, setTypingNames] = useState<string[]>([]);
 
   useEffect(() => {
     if (!groupId || !userId) return;
@@ -27,7 +28,7 @@ export function useChatWebSocket(groupId: string, userId: string) {
     const connect = () => {
       if (!active) return;
       setConnectionState("connecting");
-      const socket = new WebSocket(`${websocketBaseUrl}/ws/groups/${groupId}`);
+      const socket = new WebSocket(`${websocketBaseUrl}/ws/groups/${groupId}?token=${encodeURIComponent(token)}`);
       socketRef.current = socket;
 
       socket.onopen = () => {
@@ -51,6 +52,10 @@ export function useChatWebSocket(groupId: string, userId: string) {
           const event = JSON.parse(message.data) as ChatBroadcast & { error?: string };
           if (event.error) { setServerError(event.error); return; }
           setServerError("");
+          if (event.type === "typing_start" || event.type === "typing_stop") {
+            setTypingNames((current) => event.type === "typing_start" ? [...new Set([...current, event.username ?? "A member"])] : current.filter((n) => n !== event.username));
+            return;
+          }
           setMessages((current) => [...current, event]);
           if (event.live_scores) setScores(event.live_scores);
         } catch {
@@ -59,7 +64,7 @@ export function useChatWebSocket(groupId: string, userId: string) {
       };
     };
 
-    fetch(`${apiBaseUrl}/api/groups/${groupId}/scores`)
+    fetch(`${apiBaseUrl}/api/groups/${groupId}/scores`, { headers: { Authorization: `Bearer ${token}` } })
       .then((response) => {
         if (!response.ok) throw new Error("Unable to load scores");
         return response.json() as Promise<LiveScore[]>;
@@ -74,7 +79,7 @@ export function useChatWebSocket(groupId: string, userId: string) {
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [groupId, userId]);
+  }, [groupId, userId, token]);
 
   const sendEvent = useCallback((event: Omit<ChatEvent, "user_id">) => {
     if (socketRef.current?.readyState !== WebSocket.OPEN) return false;
@@ -82,5 +87,9 @@ export function useChatWebSocket(groupId: string, userId: string) {
     return true;
   }, [userId]);
 
-  return { messages, scores, serverError, connectionState, sendEvent };
+  const sendTyping = useCallback((typing: boolean) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) socketRef.current.send(JSON.stringify({ type: typing ? "typing_start" : "typing_stop", user_id: userId }));
+  }, [userId]);
+
+  return { messages, scores, serverError, connectionState, sendEvent, sendTyping, typingNames };
 }
