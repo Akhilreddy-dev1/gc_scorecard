@@ -23,9 +23,9 @@ ROSTER = {
     "avinash": ("Avinash", "member", "/avatars/avinash.jpg"), "dheeraj": ("Dheeraj", "member", "/avatars/dheeraj.jpg"),
 }
 PASSWORDS = {
-    "akhil": "Akhil123",
+    "akhil": "Akhil@123",
     "varun": "Varun123",
-    "yaswanth": "Yaswanth123",
+    "yaswanth": "Yashu11",
     "binduja": "Binduja123",
     "haasini": "Haasini123",
     "shreeraj": "Shreeraj123",
@@ -34,7 +34,7 @@ PASSWORDS = {
     "harini": "Harini123",
     "vaagdevi": "Vaagdevi123",
     "avinash": "Avinash123",
-    "dheeraj": "Dheeraj123",
+    "dheeraj": "Dheeraj218",
 }
 
 def issue_auth_token(user_id: UUID, member_id: str) -> str:
