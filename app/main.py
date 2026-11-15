@@ -5,12 +5,15 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine, get_db
+from app.models import ChatMessage
 from app.routers.groups import router as groups_router, ROSTER, PRIVATE_GROUP_ID, verify_auth_token
 from app.routers.scoring_rules import router as scoring_rules_router
 from app.seed import seed_scoring_rules
@@ -64,7 +67,15 @@ def create_app(
         }
 
     @app.get("/health")
-    def health() -> dict[str, str]:
+    def health():
+        try:
+            with database_engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+        except Exception:
+            return JSONResponse(
+                status_code=503,
+                content={"status": "error", "database": "unavailable"},
+            )
         return {"status": "ok"}
 
     @app.websocket("/ws/groups/{group_id}")
@@ -91,6 +102,14 @@ def create_app(
                             UUID(group_id),
                             event,
                         )
+                        stored_message = ChatMessage(
+                            group_id=UUID(group_id), user_id=event.user_id,
+                            event_type=event.event_type, content=event.content,
+                            media_url=event.media_url,
+                        )
+                        db.add(stored_message)
+                        db.commit()
+                        db.refresh(stored_message)
                     await manager.broadcast(
                         group_id,
                         {
@@ -99,7 +118,7 @@ def create_app(
                             "username": username,
                             "sent_at": datetime.now(timezone.utc).isoformat(),
                             "content": event.content,
-                            "message_id": event.message_id,
+                            "message_id": str(stored_message.id),
                             "media_url": event.media_url,
                             "points_awarded": points_awarded,
                             "total_points": total_points,

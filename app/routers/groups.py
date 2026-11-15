@@ -1,15 +1,14 @@
-import json
 import secrets
 from datetime import datetime, timezone
 from uuid import UUID, uuid4, uuid5, NAMESPACE_URL
 from itsdangerous import URLSafeTimedSerializer, BadSignature
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Group, GroupMember, User, UserScore
+from app.models import ChatMessage, Group, GroupMember, User, UserScore
 from app.schemas import SessionRequest, SessionResponse
 from app.config import get_settings
 
@@ -22,6 +21,20 @@ ROSTER = {
     "swejith": ("Swejith", "member", "/avatars/swejith.jpg"), "hasini": ("Hasini", "member", "/avatars/hasini.jpg"),
     "harini": ("Harini", "member", "/avatars/harini.jpg"), "vaagdevi": ("Vaagdevi", "member", "/avatars/vaagdevi.jpg"),
     "avinash": ("Avinash", "member", "/avatars/avinash.jpg"), "dheeraj": ("Dheeraj", "member", "/avatars/dheeraj.jpg"),
+}
+PASSWORDS = {
+    "akhil": "Akhil@123",
+    "varun": "Varun123",
+    "yaswanth": "Yashu11",
+    "binduja": "Binduja123",
+    "haasini": "Haasini123",
+    "shreeraj": "Shreeraj123",
+    "swejith": "Sweju0401",
+    "hasini": "Hasini123",
+    "harini": "Harini123",
+    "vaagdevi": "Vaagdevi123",
+    "avinash": "Avinash123",
+    "dheeraj": "Dheeraj218",
 }
 
 def issue_auth_token(user_id: UUID, member_id: str) -> str:
@@ -36,12 +49,45 @@ def verify_auth_token(token: str) -> dict | None:
     try: return URLSafeTimedSerializer(secret, salt="scorecard-session").loads(token, max_age=60 * 60 * 24 * 30)
     except BadSignature: return None
 
+
+def require_group_session(group_id: UUID, authorization: str | None) -> dict:
+    token = authorization.removeprefix("Bearer ") if authorization else ""
+    auth = verify_auth_token(token)
+    if not auth or auth.get("member_id") not in ROSTER or group_id != PRIVATE_GROUP_ID:
+        raise HTTPException(status_code=401, detail="Sign in to access this chat")
+    return auth
+
+
+@router.get("/groups/{group_id}/messages")
+def get_chat_history(group_id: UUID, authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> list[dict]:
+    require_group_session(group_id, authorization)
+    rows = db.execute(
+        select(ChatMessage, User.username)
+        .join(User, User.id == ChatMessage.user_id)
+        .where(ChatMessage.group_id == group_id)
+        .order_by(ChatMessage.created_at, ChatMessage.id)
+    )
+    return [{"type": message.event_type, "user_id": str(message.user_id), "username": username,
+             "message_id": str(message.id), "content": message.content, "media_url": message.media_url,
+             "sent_at": message.created_at.isoformat()} for message, username in rows]
+
+
+@router.delete("/groups/{group_id}/messages")
+async def delete_chat_history(group_id: UUID, authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> dict[str, str]:
+    auth = require_group_session(group_id, authorization)
+    if auth.get("member_id") != "akhil":
+        raise HTTPException(status_code=403, detail="Only the owner can delete chat history")
+    db.execute(delete(ChatMessage).where(ChatMessage.group_id == group_id))
+    db.commit()
+    from app.websocket_manager import manager
+    await manager.broadcast(str(group_id), {"type": "history_cleared"})
+    return {"status": "cleared"}
+
 @router.post("/auth/verify")
 def verify_member(payload: dict, db: Session = Depends(get_db)) -> dict:
     member_id = str(payload.get("member_id", "")); password = str(payload.get("password", ""))
-    try: credentials = json.loads(get_settings().member_passwords)
-    except json.JSONDecodeError: raise HTTPException(status_code=500, detail="MEMBER_PASSWORDS must be valid JSON")
-    if member_id not in ROSTER or not secrets.compare_digest(password, str(credentials.get(member_id, ""))):
+    expected_password = PASSWORDS.get(member_id, "")
+    if member_id not in ROSTER or not secrets.compare_digest(password, expected_password):
         raise HTTPException(status_code=401, detail="Avatar or password is incorrect")
     name, role, avatar = ROSTER[member_id]
     user_id = uuid5(NAMESPACE_URL, f"UNFILTERED_HOOMANS_MAIN:{member_id}")
