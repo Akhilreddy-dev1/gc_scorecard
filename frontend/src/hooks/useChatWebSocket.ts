@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiBaseUrl, backendIsConfigured, websocketBaseUrl } from "../config/api";
 
-export type ChatEventType = "text" | "reaction" | "media" | "reel_share" | "typing_start" | "typing_stop" | "history_cleared";
+export type ChatEventType = "text" | "reaction" | "media" | "typing_start" | "typing_stop";
 export type ChatEvent = { type: ChatEventType; user_id: string; content?: string; message_id?: string; media_url?: string };
 export type LiveScore = { user_id: string; username: string; points: number };
 export type ChatBroadcast = ChatEvent & { username?: string; sent_at?: string; points_awarded?: number; total_points?: number; live_scores?: LiveScore[] };
