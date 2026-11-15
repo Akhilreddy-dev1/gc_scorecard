@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import type { ChatBroadcast, ChatEventType } from "../hooks/useChatWebSocket";
 
+const reactions = ["❤️", "👍", "😂", "🔥"];
+
 type ChatRoomProps = {
   messages: ChatBroadcast[];
   connectionState: string;
@@ -14,18 +16,6 @@ type ChatRoomProps = {
   isOwner: boolean;
   onTyping: (typing: boolean) => void;
 };
-
-function safeReelEmbedUrl(url?: string): string | undefined {
-  if (!url) return undefined;
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:") return undefined;
-    const allowedHosts = new Set(["instagram.com", "www.instagram.com", "youtube.com", "www.youtube.com", "youtu.be"]);
-    return allowedHosts.has(parsed.hostname) ? parsed.toString() : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 function savedChatTheme() {
   try { return localStorage.getItem("gc-scorecard-chat-theme") ?? "onyx"; }
@@ -87,7 +77,6 @@ export function ChatRoom({ messages, connectionState, serverError, onSend, typin
       </div>
       <div className="message-list" aria-live="polite">
         {messages.map((message, index) => {
-          const reelUrl = safeReelEmbedUrl(message.media_url ?? message.content);
           return (
             <article className="chat-bubble" key={`${message.user_id}-${index}`}>
             <div className="bubble-meta">
@@ -98,17 +87,23 @@ export function ChatRoom({ messages, connectionState, serverError, onSend, typin
               <img className="shared-media" src={message.media_url} alt={message.content ?? "Shared image"} />
             ) : message.media_url?.startsWith("data:video/") ? (
               <video className="shared-media" src={message.media_url} controls aria-label={message.content ?? "Shared video"} />
-            ) : message.type === "reel_share" && reelUrl ? (
-              <iframe
-                className="reel-player"
-                src={reelUrl}
-                title={`Reel shared by ${message.user_id.slice(0, 8)}`}
-                loading="lazy"
-                allow="autoplay; encrypted-media; picture-in-picture"
-                allowFullScreen
-              />
             ) : (
               <p>{message.content ?? message.media_url ?? message.type}</p>
+            )}
+            {message.type !== "reaction" && (
+              <div className="reaction-bar" aria-label="React to message">
+                {reactions.map((reaction) => (
+                  <button
+                    className="reaction-button"
+                    key={reaction}
+                    type="button"
+                    aria-label={`React with ${reaction}`}
+                    onClick={() => onSend({ type: "reaction", content: reaction })}
+                  >
+                    {reaction}
+                  </button>
+                ))}
+              </div>
             )}
             </article>
           );
