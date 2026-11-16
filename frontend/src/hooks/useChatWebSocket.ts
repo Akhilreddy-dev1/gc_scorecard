@@ -51,7 +51,10 @@ export function useChatWebSocket(groupId: string, userId: string, token = "") {
       };
       socket.onmessage = (message) => {
         try {
-          const event = JSON.parse(message.data) as ChatBroadcast & { error?: string };
+          const event = JSON.parse(message.data) as Omit<ChatBroadcast, "type"> & {
+            type: ChatEventType | "history_cleared";
+            error?: string;
+          };
           if (event.error) { setServerError(event.error); return; }
           setServerError("");
           if (event.type === "history_cleared") { setMessages([]); return; }
@@ -59,8 +62,9 @@ export function useChatWebSocket(groupId: string, userId: string, token = "") {
             setTypingNames((current) => event.type === "typing_start" ? [...new Set([...current, event.username ?? "A member"])] : current.filter((n) => n !== event.username));
             return;
           }
-          setMessages((current) => [...current, event]);
-          if (event.live_scores) setScores(event.live_scores);
+          const broadcast = event as ChatBroadcast;
+          setMessages((current) => [...current, broadcast]);
+          if (broadcast.live_scores) setScores(broadcast.live_scores);
         } catch {
           setServerError("The server sent an unreadable live chat update.");
         }
