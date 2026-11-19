@@ -7,7 +7,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -26,6 +26,12 @@ def initialize_database(
     session_factory: sessionmaker[Session] = SessionLocal,
 ) -> None:
     Base.metadata.create_all(bind=database_engine)
+    inspector = inspect(database_engine)
+    if "chat_messages" in inspector.get_table_names():
+        columns = {column["name"] for column in inspector.get_columns("chat_messages")}
+        if "target_message_id" not in columns:
+            with database_engine.begin() as connection:
+                connection.execute(text("ALTER TABLE chat_messages ADD COLUMN target_message_id VARCHAR(64)"))
     with session_factory() as db:
         seed_scoring_rules(db)
 
@@ -96,6 +102,7 @@ def create_app(
                     if event.event_type in {"typing_start", "typing_stop"}:
                         await manager.broadcast(group_id, {"type": event.event_type, "username": username})
                         continue
+                    target_message_id = event.message_id if event.event_type == "reaction" else None
                     with session_factory() as db:
                         points_awarded, total_points, live_scores = record_event(
                             db,
@@ -105,7 +112,7 @@ def create_app(
                         stored_message = ChatMessage(
                             group_id=UUID(group_id), user_id=event.user_id,
                             event_type=event.event_type, content=event.content,
-                            media_url=event.media_url,
+                            media_url=event.media_url, target_message_id=target_message_id,
                         )
                         db.add(stored_message)
                         db.commit()
@@ -119,9 +126,11 @@ def create_app(
                             "sent_at": datetime.now(timezone.utc).isoformat(),
                             "content": event.content,
                             "message_id": str(stored_message.id),
+                            "target_message_id": target_message_id,
                             "media_url": event.media_url,
                             "points_awarded": points_awarded,
                             "total_points": total_points,
+                            "live_scores": live_scores,
                         },
                     )
                 except (ValueError, ValidationError) as error:

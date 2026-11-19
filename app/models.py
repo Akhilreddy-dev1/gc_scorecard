@@ -70,6 +70,7 @@ class ChatMessage(Base):
     event_type: Mapped[str] = mapped_column(String(30), nullable=False)
     content: Mapped[str | None] = mapped_column(Text)
     media_url: Mapped[str | None] = mapped_column(Text)
+    target_message_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
 
 

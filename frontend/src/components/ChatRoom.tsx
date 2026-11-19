@@ -10,6 +10,7 @@ type ChatRoomProps = {
   onSend: (event: {
     type: ChatEventType;
     content?: string;
+    message_id?: string;
     media_url?: string;
   }) => boolean;
   typingNames: string[];
@@ -62,6 +63,23 @@ export function ChatRoom({ messages, connectionState, serverError, onSend, typin
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const reactionsByMessage = new Map<string, Map<string, string[]>>();
+  for (const item of messages) {
+    if (item.type === "reaction" && item.target_message_id && item.content) {
+      let emojiMap = reactionsByMessage.get(item.target_message_id);
+      if (!emojiMap) {
+        emojiMap = new Map();
+        reactionsByMessage.set(item.target_message_id, emojiMap);
+      }
+      const users = emojiMap.get(item.content) ?? [];
+      users.push(item.username ?? item.user_id.slice(0, 8));
+      emojiMap.set(item.content, users);
+    }
+  }
+  const displayMessages = messages.filter(
+    (item) => !(item.type === "reaction" && item.target_message_id),
+  );
+
   return (
     <section className="glass-panel placeholder-panel" aria-labelledby="chat-room-title">
       <fieldset className="theme-options">
@@ -83,9 +101,9 @@ export function ChatRoom({ messages, connectionState, serverError, onSend, typin
         if (!await onClearHistory()) setHistoryError("Could not delete chat history. Please try again.");
       }}>Delete chat history</button>{historyError && <span className="error-message" role="alert">{historyError}</span>}</div>}
       <div className="message-list" aria-live="polite">
-        {messages.map((message, index) => {
+        {displayMessages.map((message, index) => {
           return (
-            <article className="chat-bubble" key={`${message.user_id}-${index}`}>
+            <article className="chat-bubble" key={message.message_id ?? `${message.user_id}-${index}`}>
             <div className="bubble-meta">
               <strong>{message.username ?? message.user_id.slice(0, 8)}</strong>
               {isOwner && message.sent_at && <time>{new Date(message.sent_at).toLocaleTimeString()}</time>}
@@ -99,17 +117,25 @@ export function ChatRoom({ messages, connectionState, serverError, onSend, typin
             )}
             {message.type !== "reaction" && (
               <div className="reaction-bar" aria-label="React to message">
-                {reactions.map((reaction) => (
-                  <button
-                    className="reaction-button"
-                    key={reaction}
-                    type="button"
-                    aria-label={`React with ${reaction}`}
-                    onClick={() => onSend({ type: "reaction", content: reaction })}
-                  >
-                    {reaction}
-                  </button>
-                ))}
+                {reactions.map((reaction) => {
+                  const reactedUsers = message.message_id
+                    ? reactionsByMessage.get(message.message_id)?.get(reaction) ?? []
+                    : [];
+                  const count = reactedUsers.length;
+                  return (
+                    <button
+                      className={`reaction-button${count > 0 ? " has-reactions" : ""}`}
+                      key={reaction}
+                      type="button"
+                      aria-label={`React with ${reaction}${count > 0 ? ` (${count})` : ""}`}
+                      title={count > 0 ? reactedUsers.join(", ") : `React with ${reaction}`}
+                      onClick={() => onSend({ type: "reaction", content: reaction, message_id: message.message_id })}
+                    >
+                      <span>{reaction}</span>
+                      {count > 0 && <span className="reaction-count">{count}</span>}
+                    </button>
+                  );
+                })}
               </div>
             )}
             </article>

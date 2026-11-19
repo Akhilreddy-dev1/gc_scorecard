@@ -19,7 +19,7 @@ class Settings(BaseSettings):
         "https://frontend-wheat-gamma-11.vercel.app,https://frontend-akhil-0cdc.vercel.app"
     )
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     @property
     def allowed_frontend_origins(self) -> list[str]:

@@ -35,6 +35,7 @@ def test_plain_postgres_url_uses_psycopg_three_driver():
 
 def test_settings_encode_special_characters_in_database_password():
     settings = Settings(
+        _env_file=None,
         db_user="postgres",
         db_password="p@ss word#1",
         db_host="pooler.supabase.com",
@@ -114,6 +115,19 @@ def test_websocket_event_updates_and_broadcasts_score():
                     }
                 )
                 payload = websocket.receive_json()
+                websocket.send_json(
+                    {
+                        "type": "reaction",
+                        "user_id": str(user_id),
+                        "content": "❤️",
+                        "message_id": payload["message_id"],
+                    }
+                )
+                reaction_payload = websocket.receive_json()
+            history_response = client.get(
+                f"/api/groups/{PRIVATE_GROUP_ID}/messages",
+                headers={"Authorization": f"Bearer {token}"},
+            )
     finally:
         if previous_secret is None:
             os.environ.pop("AUTH_SECRET", None)
@@ -125,3 +139,18 @@ def test_websocket_event_updates_and_broadcasts_score():
     assert payload["points_awarded"] == 3
     assert payload["total_points"] == 3
     assert payload["username"] == "Akhil"
+    assert payload["live_scores"] == [
+        {"user_id": str(user_id), "username": "Akhil", "points": 3}
+    ]
+    assert reaction_payload["type"] == "reaction"
+    assert reaction_payload["target_message_id"] == payload["message_id"]
+    assert reaction_payload["points_awarded"] == 1
+    assert reaction_payload["total_points"] == 4
+    assert reaction_payload["live_scores"] == [
+        {"user_id": str(user_id), "username": "Akhil", "points": 4}
+    ]
+    assert history_response.status_code == 200
+    history = history_response.json()
+    assert len(history) == 2
+    reaction_entry = next(item for item in history if item["type"] == "reaction")
+    assert reaction_entry["target_message_id"] == payload["message_id"]
