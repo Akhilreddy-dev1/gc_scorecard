@@ -1,7 +1,14 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChatBroadcast, ChatEventType } from "../hooks/useChatWebSocket";
 
-const reactions = ["❤️", "👍", "😂", "🔥"];
+const QUICK_REACTIONS = ["❤️", "😂", "😮", "😢", "😡", "👍"];
+const MORE_REACTIONS = [
+  "🔥", "😍", "🥰", "😭", "💀", "🙌", "👏", "💯",
+  "🎉", "✨", "🤩", "😎", "🥳", "🤯", "🥺", "🙏",
+  "🤝", "💪", "👀", "💅", "🫡", "🫶", "😈", "🤡",
+  "🫠", "🤭", "🫣", "😤", "💔", "❤️‍🔥", "💕", "👑",
+  "⭐", "⚡", "🍿", "🍕", "☕", "🏆", "👻", "💩",
+];
 
 type ChatRoomProps = {
   messages: ChatBroadcast[];
@@ -28,7 +35,28 @@ export function ChatRoom({ messages, connectionState, serverError, onSend, typin
   const [text, setText] = useState("");
   const [uploadError, setUploadError] = useState("");
   const [historyError, setHistoryError] = useState("");
+  const [openPickerFor, setOpenPickerFor] = useState<string | null>(null);
+  const [showMoreEmojis, setShowMoreEmojis] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!openPickerFor) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenPickerFor(null);
+        setShowMoreEmojis(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [openPickerFor]);
+
+  const sendReaction = (messageId: string | undefined, emoji: string) => {
+    if (!messageId) return;
+    onSend({ type: "reaction", content: emoji, message_id: messageId });
+    setOpenPickerFor(null);
+    setShowMoreEmojis(false);
+  };
 
   const sendText = () => {
     const content = text.trim();
@@ -100,45 +128,115 @@ export function ChatRoom({ messages, connectionState, serverError, onSend, typin
         setHistoryError("");
         if (!await onClearHistory()) setHistoryError("Could not delete chat history. Please try again.");
       }}>Delete chat history</button>{historyError && <span className="error-message" role="alert">{historyError}</span>}</div>}
-      <div className="message-list" aria-live="polite">
+      <div className="message-list" aria-live="polite" onClick={() => { if (openPickerFor) { setOpenPickerFor(null); setShowMoreEmojis(false); } }}>
         {displayMessages.map((message, index) => {
+          const msgId = message.message_id;
+          const msgReactions = msgId ? reactionsByMessage.get(msgId) : undefined;
+          const reactionEntries = msgReactions ? [...msgReactions.entries()] : [];
+          const pickerOpen = Boolean(msgId && openPickerFor === msgId);
           return (
-            <article className="chat-bubble" key={message.message_id ?? `${message.user_id}-${index}`}>
-            <div className="bubble-meta">
-              <strong>{message.username ?? message.user_id.slice(0, 8)}</strong>
-              {isOwner && message.sent_at && <time>{new Date(message.sent_at).toLocaleTimeString()}</time>}
-            </div>
-            {message.media_url?.startsWith("data:image/") ? (
-              <img className="shared-media" src={message.media_url} alt={message.content ?? "Shared image"} />
-            ) : message.media_url?.startsWith("data:video/") ? (
-              <video className="shared-media" src={message.media_url} controls aria-label={message.content ?? "Shared video"} />
-            ) : (
-              <p>{message.content ?? message.media_url ?? message.type}</p>
-            )}
-            {message.type !== "reaction" && (
-              <div className="reaction-bar" aria-label="React to message">
-                {reactions.map((reaction) => {
-                  const reactedUsers = message.message_id
-                    ? reactionsByMessage.get(message.message_id)?.get(reaction) ?? []
-                    : [];
-                  const count = reactedUsers.length;
-                  return (
-                    <button
-                      className={`reaction-button${count > 0 ? " has-reactions" : ""}`}
-                      key={reaction}
-                      type="button"
-                      aria-label={`React with ${reaction}${count > 0 ? ` (${count})` : ""}`}
-                      title={count > 0 ? reactedUsers.join(", ") : `React with ${reaction}`}
-                      onClick={() => onSend({ type: "reaction", content: reaction, message_id: message.message_id })}
-                    >
-                      <span>{reaction}</span>
-                      {count > 0 && <span className="reaction-count">{count}</span>}
-                    </button>
-                  );
-                })}
+            <div className="message-row" key={msgId ?? `${message.user_id}-${index}`}>
+              <div className="bubble-wrapper">
+                <article
+                  className="chat-bubble"
+                  onDoubleClick={() => { if (message.type !== "reaction") sendReaction(msgId, "❤️"); }}
+                  title={message.type !== "reaction" ? "Double-tap to ❤️" : undefined}
+                >
+                  <div className="bubble-meta">
+                    <strong>{message.username ?? message.user_id.slice(0, 8)}</strong>
+                    {isOwner && message.sent_at && <time>{new Date(message.sent_at).toLocaleTimeString()}</time>}
+                  </div>
+                  {message.media_url?.startsWith("data:image/") ? (
+                    <img className="shared-media" src={message.media_url} alt={message.content ?? "Shared image"} />
+                  ) : message.media_url?.startsWith("data:video/") ? (
+                    <video className="shared-media" src={message.media_url} controls aria-label={message.content ?? "Shared video"} />
+                  ) : (
+                    <p>{message.content ?? message.media_url ?? message.type}</p>
+                  )}
+                </article>
+                {message.type !== "reaction" && msgId && (
+                  <button
+                    className={`react-trigger${pickerOpen ? " open" : ""}`}
+                    type="button"
+                    aria-label="React to message"
+                    title="React"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (pickerOpen) {
+                        setOpenPickerFor(null);
+                        setShowMoreEmojis(false);
+                      } else {
+                        setOpenPickerFor(msgId);
+                        setShowMoreEmojis(false);
+                      }
+                    }}
+                  >
+                    ☺
+                  </button>
+                )}
+                {pickerOpen && msgId && (
+                  <div className={`ig-reaction-popover${index < 2 ? " below" : ""}`} role="dialog" aria-label="Choose reaction" onClick={(event) => event.stopPropagation()}>
+                    <div className="ig-quick-bar">
+                      {QUICK_REACTIONS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          className="ig-emoji-btn"
+                          aria-label={`React with ${emoji}`}
+                          onClick={() => sendReaction(msgId, emoji)}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className={`ig-emoji-btn ig-more-btn${showMoreEmojis ? " active" : ""}`}
+                        aria-label="More reactions"
+                        title="More emojis"
+                        onClick={() => setShowMoreEmojis((open) => !open)}
+                      >
+                        +
+                      </button>
+                    </div>
+                    {showMoreEmojis && (
+                      <div className="ig-more-grid" role="list">
+                        {MORE_REACTIONS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            className="ig-emoji-btn"
+                            aria-label={`React with ${emoji}`}
+                            onClick={() => sendReaction(msgId, emoji)}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
-            </article>
+              {reactionEntries.length > 0 && (
+                <div className="reaction-pills" aria-label="Message reactions">
+                  {reactionEntries.map(([emoji, users]) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      className="reaction-pill"
+                      title={users.join(", ")}
+                      aria-label={`${emoji} ${users.length} (${users.join(", ")})`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        sendReaction(msgId, emoji);
+                      }}
+                    >
+                      <span>{emoji}</span>
+                      {users.length > 1 && <span className="reaction-count">{users.length}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
