@@ -11,6 +11,7 @@ const MORE_REACTIONS = [
 ];
 
 type ChatRoomProps = {
+  currentUserId: string;
   messages: ChatBroadcast[];
   connectionState: string;
   serverError: string;
@@ -31,13 +32,19 @@ function savedChatTheme() {
   catch { return "onyx"; }
 }
 
-export function ChatRoom({ messages, connectionState, serverError, onSend, typingNames, isOwner, onTyping, onClearHistory }: ChatRoomProps) {
+export function ChatRoom({ currentUserId, messages, connectionState, serverError, onSend, typingNames, isOwner, onTyping, onClearHistory }: ChatRoomProps) {
   const [text, setText] = useState("");
   const [uploadError, setUploadError] = useState("");
   const [historyError, setHistoryError] = useState("");
   const [openPickerFor, setOpenPickerFor] = useState<string | null>(null);
   const [showMoreEmojis, setShowMoreEmojis] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const lastTapRef = useRef<{ id: string; time: number } | null>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length]);
 
   useEffect(() => {
     if (!openPickerFor) return;
@@ -56,6 +63,17 @@ export function ChatRoom({ messages, connectionState, serverError, onSend, typin
     onSend({ type: "reaction", content: emoji, message_id: messageId });
     setOpenPickerFor(null);
     setShowMoreEmojis(false);
+  };
+
+  const handleTouchTap = (messageId: string | undefined, isReaction: boolean) => {
+    if (isReaction || !messageId) return;
+    const now = Date.now();
+    if (lastTapRef.current && lastTapRef.current.id === messageId && now - lastTapRef.current.time < 300) {
+      lastTapRef.current = null;
+      sendReaction(messageId, "❤️");
+    } else {
+      lastTapRef.current = { id: messageId, time: now };
+    }
   };
 
   const sendText = () => {
@@ -131,15 +149,17 @@ export function ChatRoom({ messages, connectionState, serverError, onSend, typin
       <div className="message-list" aria-live="polite" onClick={() => { if (openPickerFor) { setOpenPickerFor(null); setShowMoreEmojis(false); } }}>
         {displayMessages.map((message, index) => {
           const msgId = message.message_id;
+          const isOwn = message.user_id === currentUserId;
           const msgReactions = msgId ? reactionsByMessage.get(msgId) : undefined;
           const reactionEntries = msgReactions ? [...msgReactions.entries()] : [];
           const pickerOpen = Boolean(msgId && openPickerFor === msgId);
           return (
-            <div className="message-row" key={msgId ?? `${message.user_id}-${index}`}>
+            <div className={`message-row${isOwn ? " is-own" : ""}`} key={msgId ?? `${message.user_id}-${index}`}>
               <div className="bubble-wrapper">
                 <article
-                  className="chat-bubble"
+                  className={`chat-bubble${isOwn ? " own-bubble" : ""}`}
                   onDoubleClick={() => { if (message.type !== "reaction") sendReaction(msgId, "❤️"); }}
+                  onTouchEnd={() => handleTouchTap(msgId, message.type === "reaction")}
                   title={message.type !== "reaction" ? "Double-tap to ❤️" : undefined}
                 >
                   <div className="bubble-meta">
@@ -239,6 +259,7 @@ export function ChatRoom({ messages, connectionState, serverError, onSend, typin
             </div>
           );
         })}
+        <div ref={bottomRef} aria-hidden="true" />
       </div>
       {serverError && <p className="error-message" role="alert">{serverError}</p>}
       {isOwner && typingNames.length > 0 && <div className="typing-pill">{typingNames.join(", ")} {typingNames.length === 1 ? "is" : "are"} typing...</div>}
